@@ -3,7 +3,7 @@ import csv
 import json
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request, send_file
 from flask_cors import CORS
 from elasticsearch import Elasticsearch
@@ -182,10 +182,23 @@ def health_check():
 
 @app.route('/api/stats')
 def get_stats():
-    """Get log statistics from Elasticsearch"""
+    """Get comprehensive dashboard statistics"""
     stats = {
         'timestamp': datetime.utcnow().isoformat(),
         'total_logs': 0,
+        'total_logs_24h': 0,
+        'error_rate': 0,
+        'avg_response_time': 0,
+        'top_slowest_endpoints': [],
+        'active_users': 0,
+        'latest_error': None,
+        'files_uploaded': 0,
+        'system_status': {
+            'elasticsearch': 'unknown',
+            'mongodb': 'unknown',
+            'redis': 'unknown',
+            'overall': 'degraded'
+        },
         'indices': [],
         'error': None
     }
@@ -194,9 +207,191 @@ def get_stats():
         if not es_client:
             raise Exception("Elasticsearch client not initialized")
         
-        # Get count of all documents in saas-logs-* indices
+        # Calculate 24h timestamp
+        now = datetime.utcnow()
+        last_24h = now - timedelta(hours=24)
+        last_24h_str = last_24h.isoformat()
+        
+        # 1. Total logs (all time)
         count_result = es_client.count(index="saas-logs-*")
         stats['total_logs'] = count_result.get('count', 0)
+        
+        # 2. Total logs (last 24 hours)
+        count_24h_query = {
+            "query": {
+                "range": {
+                    "timestamp": {
+                        "gte": last_24h_str
+                    }
+                }
+            }
+        }
+        count_24h_result = es_client.count(index="saas-logs-*", body=count_24h_query)
+        stats['total_logs_24h'] = count_24h_result.get('count', 0)
+        
+        # 3. Error rate: (5xx errors / total requests) * 100
+        error_query = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"range": {"timestamp": {"gte": last_24h_str}}},
+                        {"range": {"status_code": {"gte": 500, "lt": 600}}}
+                    ]
+                }
+            }
+        }
+        error_count = es_client.count(index="saas-logs-*", body=error_query).get('count', 0)
+        if stats['total_logs_24h'] > 0:
+            stats['error_rate'] = round((error_count / stats['total_logs_24h']) * 100, 2)
+        
+        # 4. Average response time (last 24h)
+        avg_response_query = {
+            "query": {
+                "range": {
+                    "timestamp": {
+                        "gte": last_24h_str
+                    }
+                }
+            },
+            "aggs": {
+                "avg_response": {
+                    "avg": {
+                        "field": "response_time_ms"
+                    }
+                }
+            },
+            "size": 0
+        }
+        avg_response_result = es_client.search(index="saas-logs-*", body=avg_response_query)
+        avg_value = avg_response_result.get('aggregations', {}).get('avg_response', {}).get('value')
+        stats['avg_response_time'] = round(avg_value, 0) if avg_value else 0
+        
+        # 5. Top 3 slowest endpoints
+        slowest_endpoints_query = {
+            "query": {
+                "range": {
+                    "timestamp": {
+                        "gte": last_24h_str
+                    }
+                }
+            },
+            "aggs": {
+                "endpoints": {
+                    "terms": {
+                        "field": "endpoint.keyword",
+                        "size": 3,
+                        "order": {
+                            "avg_response": "desc"
+                        }
+                    },
+                    "aggs": {
+                        "avg_response": {
+                            "avg": {
+                                "field": "response_time_ms"
+                            }
+                        }
+                    }
+                }
+            },
+            "size": 0
+        }
+        slowest_result = es_client.search(index="saas-logs-*", body=slowest_endpoints_query)
+        for bucket in slowest_result.get('aggregations', {}).get('endpoints', {}).get('buckets', []):
+            stats['top_slowest_endpoints'].append({
+                'endpoint': bucket.get('key'),
+                'avg_response_time': round(bucket.get('avg_response', {}).get('value', 0), 0),
+                'count': bucket.get('doc_count', 0)
+            })
+        
+        # 6. Active users (unique user_ids, last 24h)
+        active_users_query = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"range": {"timestamp": {"gte": last_24h_str}}},
+                        {"exists": {"field": "user_id"}}
+                    ]
+                }
+            },
+            "aggs": {
+                "unique_users": {
+                    "cardinality": {
+                        "field": "user_id.keyword"
+                    }
+                }
+            },
+            "size": 0
+        }
+        active_users_result = es_client.search(index="saas-logs-*", body=active_users_query)
+        stats['active_users'] = active_users_result.get('aggregations', {}).get('unique_users', {}).get('value', 0)
+        
+        # 7. Latest error (most recent ERROR or CRITICAL log)
+        latest_error_query = {
+            "query": {
+                "bool": {
+                    "should": [
+                        {"term": {"level.keyword": "ERROR"}},
+                        {"term": {"level.keyword": "CRITICAL"}}
+                    ],
+                    "minimum_should_match": 1
+                }
+            },
+            "sort": [{"timestamp": {"order": "desc"}}],
+            "size": 1
+        }
+        latest_error_result = es_client.search(index="saas-logs-*", body=latest_error_query)
+        if latest_error_result['hits']['hits']:
+            error_log = latest_error_result['hits']['hits'][0]['_source']
+            stats['latest_error'] = {
+                'timestamp': error_log.get('timestamp'),
+                'level': error_log.get('level'),
+                'message': error_log.get('message'),
+                'endpoint': error_log.get('endpoint'),
+                'status_code': error_log.get('status_code')
+            }
+        
+        # 8. Files uploaded count (from MongoDB)
+        if mongo_client:
+            try:
+                db = mongo_client[MONGO_DATABASE]
+                files_collection = db['files']
+                stats['files_uploaded'] = files_collection.count_documents({})
+            except Exception as e:
+                print(f"MongoDB files count error: {e}")
+        
+        # 9. System status
+        stats['system_status']['elasticsearch'] = 'healthy'
+        
+        # Check MongoDB
+        if mongo_client:
+            try:
+                mongo_client.admin.command('ping')
+                stats['system_status']['mongodb'] = 'healthy'
+            except:
+                stats['system_status']['mongodb'] = 'unhealthy'
+        else:
+            stats['system_status']['mongodb'] = 'unhealthy'
+        
+        # Check Redis
+        if redis_client:
+            try:
+                redis_client.ping()
+                stats['system_status']['redis'] = 'healthy'
+            except:
+                stats['system_status']['redis'] = 'unhealthy'
+        else:
+            stats['system_status']['redis'] = 'unhealthy'
+        
+        # Overall status
+        all_healthy = all(
+            status == 'healthy' 
+            for status in [
+                stats['system_status']['elasticsearch'],
+                stats['system_status']['mongodb'],
+                stats['system_status']['redis']
+            ]
+        )
+        stats['system_status']['overall'] = 'healthy' if all_healthy else 'degraded'
         
         # Get index information
         indices = es_client.cat.indices(index="saas-logs-*", format="json")
@@ -209,22 +404,194 @@ def get_stats():
         
         # Cache result in Redis for 30 seconds
         if redis_client:
-            redis_client.setex(
-                'stats:total_logs',
-                30,
-                str(stats['total_logs'])
-            )
+            try:
+                redis_client.setex(
+                    'stats:dashboard',
+                    30,
+                    json.dumps(stats)
+                )
+            except Exception as e:
+                print(f"Redis cache error: {e}")
     
     except Exception as e:
         stats['error'] = str(e)
         # Try to get cached value from Redis
         if redis_client:
-            cached_count = redis_client.get('stats:total_logs')
-            if cached_count:
-                stats['total_logs'] = int(cached_count)
-                stats['cached'] = True
+            try:
+                cached_stats = redis_client.get('stats:dashboard')
+                if cached_stats:
+                    cached_data = json.loads(cached_stats)
+                    cached_data['cached'] = True
+                    cached_data['cache_error'] = str(e)
+                    return jsonify(cached_data)
+            except:
+                pass
     
     return jsonify(stats)
+
+@app.route('/api/search', methods=['POST'])
+def comprehensive_search():
+    """Comprehensive search endpoint with filters and pagination"""
+    try:
+        if not es_client:
+            return jsonify({'error': 'Elasticsearch not available'}), 503
+        
+        # Get parameters from request
+        data = request.get_json() or {}
+        search_query = data.get('q', '').strip()
+        log_level = data.get('level', '')
+        date_from = data.get('date_from', '')
+        date_to = data.get('date_to', '')
+        endpoint_filter = data.get('endpoint', '')
+        status_code = data.get('status_code', '')
+        server = data.get('server', '')
+        page = int(data.get('page', 1))
+        per_page = int(data.get('per_page', 50))
+        sort_field = data.get('sort_field', 'timestamp')
+        sort_order = data.get('sort_order', 'desc')
+        
+        # Build Elasticsearch query
+        must_conditions = []
+        filter_conditions = []
+        
+        # Search query in message field
+        if search_query:
+            must_conditions.append({
+                "multi_match": {
+                    "query": search_query,
+                    "fields": ["message", "endpoint", "user_agent"],
+                    "type": "best_fields",
+                    "operator": "or"
+                }
+            })
+        
+        # Log level filter
+        if log_level and log_level != 'ALL':
+            filter_conditions.append({
+                "term": {"level.keyword": log_level}
+            })
+        
+        # Date range filter
+        if date_from or date_to:
+            date_range = {}
+            if date_from:
+                date_range["gte"] = date_from
+            if date_to:
+                date_range["lte"] = date_to
+            filter_conditions.append({
+                "range": {"timestamp": date_range}
+            })
+        
+        # Endpoint filter
+        if endpoint_filter:
+            filter_conditions.append({
+                "term": {"endpoint.keyword": endpoint_filter}
+            })
+        
+        # Status code filter
+        if status_code:
+            if status_code == '2xx':
+                filter_conditions.append({"range": {"status_code": {"gte": 200, "lt": 300}}})
+            elif status_code == '4xx':
+                filter_conditions.append({"range": {"status_code": {"gte": 400, "lt": 500}}})
+            elif status_code == '5xx':
+                filter_conditions.append({"range": {"status_code": {"gte": 500, "lt": 600}}})
+            else:
+                filter_conditions.append({"term": {"status_code": int(status_code)}})
+        
+        # Server filter
+        if server:
+            filter_conditions.append({
+                "term": {"server.keyword": server}
+            })
+        
+        # Build query
+        if must_conditions or filter_conditions:
+            query = {
+                "query": {
+                    "bool": {
+                        "must": must_conditions if must_conditions else [{"match_all": {}}],
+                        "filter": filter_conditions
+                    }
+                }
+            }
+        else:
+            query = {
+                "query": {"match_all": {}}
+            }
+        
+        # Add sorting
+        sort_mapping = {
+            'timestamp': 'timestamp',
+            'level': 'level.keyword',
+            'endpoint': 'endpoint.keyword',
+            'status_code': 'status_code',
+            'response_time_ms': 'response_time_ms'
+        }
+        sort_es_field = sort_mapping.get(sort_field, 'timestamp')
+        query["sort"] = [{sort_es_field: {"order": sort_order}}]
+        
+        # Add pagination
+        query["from"] = (page - 1) * per_page
+        query["size"] = per_page
+        
+        # Execute search
+        result = es_client.search(index="saas-logs-*", body=query)
+        
+        # Process results
+        results = []
+        for hit in result['hits']['hits']:
+            log_entry = hit['_source']
+            log_entry['_id'] = hit['_id']
+            results.append(log_entry)
+        
+        total = result['hits']['total']['value']
+        total_pages = (total + per_page - 1) // per_page
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'total': total,
+            'page': page,
+            'pages': total_pages,
+            'per_page': per_page
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/search/endpoints', methods=['GET'])
+def get_unique_endpoints():
+    """Get unique endpoints for filter dropdown"""
+    try:
+        if not es_client:
+            return jsonify({'error': 'Elasticsearch not available'}), 503
+        
+        query = {
+            "size": 0,
+            "aggs": {
+                "unique_endpoints": {
+                    "terms": {
+                        "field": "endpoint.keyword",
+                        "size": 100
+                    }
+                }
+            }
+        }
+        
+        result = es_client.search(index="saas-logs-*", body=query)
+        
+        endpoints = []
+        for bucket in result['aggregations']['unique_endpoints']['buckets']:
+            endpoints.append(bucket['key'])
+        
+        return jsonify({
+            'success': True,
+            'endpoints': endpoints
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/logs/recent')
 def get_recent_logs():
@@ -296,149 +663,78 @@ def upload_file():
     try:
         # Check if file is in request
         if 'file' not in request.files:
-            return jsonify({'error': 'No file part in request'}), 400
+            return jsonify({'success': False, 'error': 'No file part in request'}), 400
         
         file = request.files['file']
         
         # Check if file was selected
         if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
         
         # Check if file type is allowed
         if not allowed_file(file.filename):
-            return jsonify({'error': 'File type not allowed. Only CSV and JSON files are accepted'}), 400
+            return jsonify({'success': False, 'error': 'File type not allowed. Only CSV and JSON files are accepted'}), 400
         
-        # Generate unique file ID
-        file_id = str(uuid.uuid4())
-        
-        # Secure the filename and add file_id prefix
+        # Generate unique filename with timestamp
+        timestamp = int(time.time())
         original_filename = secure_filename(file.filename)
         file_extension = original_filename.rsplit('.', 1)[1].lower()
-        new_filename = f"{file_id}.{file_extension}"
+        saved_filename = f"{timestamp}_{original_filename}"
         
         # Save file to uploads folder
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], saved_filename)
         file.save(file_path)
         
         # Get file size
         file_size = os.path.getsize(file_path)
         
-        # Read first 10 lines for preview
-        preview_lines = []
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                for i, line in enumerate(f):
-                    if i >= 10:
-                        break
-                    preview_lines.append(line.strip())
-        except Exception as e:
-            preview_lines = [f"Could not read preview: {str(e)}"]
-        
-        # Count records in file
-        record_count = 0
+        # Count records in file (log_count)
+        log_count = 0
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 if file_extension == 'csv':
-                    record_count = sum(1 for line in f) - 1  # Subtract header
+                    log_count = sum(1 for line in f) - 1  # Subtract header
                 elif file_extension == 'json':
                     data = json.load(f)
-                    record_count = len(data) if isinstance(data, list) else 1
+                    log_count = len(data) if isinstance(data, list) else 1
         except Exception as e:
             print(f"Could not count records: {e}")
         
-        # Store metadata in MongoDB
-        processing_status = 'uploaded'
+        # Generate file ID
+        file_id = str(uuid.uuid4())
+        
+        # Store metadata in MongoDB "files" collection as per requirements
         if mongo_client:
             db = mongo_client[MONGO_DATABASE]
-            uploads_collection = db['uploads']
+            files_collection = db['files']
             
             metadata = {
-                'file_id': file_id,
-                'original_filename': original_filename,
-                'stored_filename': new_filename,
+                '_id': file_id,
+                'filename': original_filename,
+                'saved_as': saved_filename,
                 'file_type': file_extension,
                 'file_size': file_size,
-                'file_size_human': f"{file_size / 1024:.2f} KB" if file_size < 1024*1024 else f"{file_size / (1024*1024):.2f} MB",
-                'upload_timestamp': datetime.utcnow(),
-                'file_path': file_path,
-                'preview': preview_lines[:10],
-                'record_count': record_count,
-                'processing_status': processing_status,
-                'logstash_triggered': False
+                'upload_date': datetime.utcnow().isoformat() + 'Z',
+                'log_count': log_count,
+                'status': 'completed',
+                'user': 'admin',
+                'file_path': file_path
             }
             
-            uploads_collection.insert_one(metadata)
-        
-        # Trigger Logstash processing by restarting the Logstash container
-        # This forces Logstash to re-read the uploads directory
-        logstash_triggered = False
-        logstash_message = ""
-        try:
-            # Check if running in Docker environment
-            result = subprocess.run(
-                ['docker', 'restart', 'saas-logstash'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            
-            if result.returncode == 0:
-                logstash_triggered = True
-                logstash_message = "Logstash processing triggered successfully"
-                processing_status = 'processing'
-                
-                # Update MongoDB with Logstash trigger status
-                if mongo_client:
-                    uploads_collection.update_one(
-                        {'file_id': file_id},
-                        {'$set': {
-                            'logstash_triggered': True,
-                            'logstash_triggered_at': datetime.utcnow(),
-                            'processing_status': processing_status
-                        }}
-                    )
-            else:
-                logstash_message = f"Could not trigger Logstash: {result.stderr}"
-                
-        except FileNotFoundError:
-            logstash_message = "Docker command not available. Logstash will process the file on its next scan cycle."
-        except subprocess.TimeoutExpired:
-            logstash_message = "Logstash restart timed out. File will be processed on next scan."
-        except Exception as e:
-            logstash_message = f"Error triggering Logstash: {str(e)}"
-        
-        # Cache upload info in Redis
-        if redis_client:
-            try:
-                redis_client.setex(
-                    f'upload:{file_id}',
-                    3600,  # 1 hour TTL
-                    json.dumps({
-                        'file_id': file_id,
-                        'filename': original_filename,
-                        'status': processing_status,
-                        'timestamp': datetime.utcnow().isoformat()
-                    })
-                )
-            except Exception as e:
-                print(f"Redis cache error: {e}")
+            files_collection.insert_one(metadata)
         
         return jsonify({
             'success': True,
             'file_id': file_id,
+            'message': 'File uploaded successfully',
             'filename': original_filename,
+            'saved_as': saved_filename,
             'file_size': file_size,
-            'file_size_human': metadata['file_size_human'],
-            'record_count': record_count,
-            'upload_timestamp': datetime.utcnow().isoformat(),
-            'preview': preview_lines,
-            'processing_status': processing_status,
-            'logstash_triggered': logstash_triggered,
-            'logstash_message': logstash_message
+            'log_count': log_count
         }), 201
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/uploads', methods=['GET'])
 def get_uploads():
@@ -448,18 +744,19 @@ def get_uploads():
             return jsonify({'error': 'MongoDB not available'}), 503
         
         db = mongo_client[MONGO_DATABASE]
-        uploads_collection = db['uploads']
+        files_collection = db['files']
         
-        # Get all uploads, sorted by upload timestamp (newest first)
-        uploads = list(uploads_collection.find(
+        # Get last 10 uploads, sorted by upload date (newest first)
+        limit = int(request.args.get('limit', 10))
+        uploads = list(files_collection.find(
             {},
-            {'_id': 0}
-        ).sort('upload_timestamp', -1).limit(100))
+            {'file_path': 0}  # Exclude internal file path
+        ).sort('upload_date', -1).limit(limit))
         
-        # Convert datetime to ISO format
+        # Convert _id to string for JSON serialization
         for upload in uploads:
-            if 'upload_timestamp' in upload:
-                upload['upload_timestamp'] = upload['upload_timestamp'].isoformat()
+            if '_id' in upload:
+                upload['_id'] = str(upload['_id'])
         
         return jsonify({
             'success': True,
@@ -469,6 +766,38 @@ def get_uploads():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/uploads/<file_id>', methods=['DELETE'])
+def delete_upload(file_id):
+    """Delete an uploaded file"""
+    try:
+        if not mongo_client:
+            return jsonify({'success': False, 'error': 'MongoDB not available'}), 503
+        
+        db = mongo_client[MONGO_DATABASE]
+        files_collection = db['files']
+        
+        # Find the file metadata
+        file_doc = files_collection.find_one({'_id': file_id})
+        
+        if not file_doc:
+            return jsonify({'success': False, 'error': 'File not found'}), 404
+        
+        # Delete physical file
+        file_path = file_doc.get('file_path')
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        
+        # Delete metadata from MongoDB
+        files_collection.delete_one({'_id': file_id})
+        
+        return jsonify({
+            'success': True,
+            'message': 'File deleted successfully'
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/logs/search', methods=['GET'])
 def search_logs():

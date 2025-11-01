@@ -1,161 +1,105 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Search Logs - SaaS Log Monitoring</title>
-    
-    <!-- Bootstrap 5 CSS -->
+    <title>Search Logs - SaaS Monitoring</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
-    <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    
     <style>
-        body {
-            background-color: #f8f9fa;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
-        
-        .navbar {
-            box-shadow: 0 2px 4px rgba(0,0,0,.08);
-        }
-        
-        .card {
-            border: none;
-            box-shadow: 0 2px 4px rgba(0,0,0,.08);
-        }
-        
-        .search-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px 0;
-            margin-bottom: 30px;
-        }
-        
         .search-box {
-            max-width: 800px;
-            margin: 0 auto;
+            border-radius: 30px;
+            padding: 12px 20px;
+            font-size: 1.1rem;
         }
         
-        .log-level-badge {
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
+        .badge-level {
+            min-width: 80px;
+            padding: 6px 12px;
         }
         
-        .log-level-INFO {
-            background-color: #cfe2ff;
-            color: #084298;
+        .status-2xx { color: #198754; font-weight: 600; }
+        .status-4xx { color: #fd7e14; font-weight: 600; }
+        .status-5xx { color: #dc3545; font-weight: 600; }
+        
+        .response-fast { color: #198754; }
+        .response-medium { color: #ffc107; }
+        .response-slow { color: #dc3545; }
+        
+        .sortable {
+            cursor: pointer;
+            user-select: none;
         }
         
-        .log-level-WARNING {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-        
-        .log-level-ERROR {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        
-        .log-level-DEBUG {
-            background-color: #d1e7dd;
-            color: #0f5132;
-        }
-        
-        .log-level-CRITICAL {
-            background-color: #842029;
-            color: white;
-        }
-        
-        .table-container {
-            background-color: white;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        
-        .table {
-            margin-bottom: 0;
-        }
-        
-        .table thead {
+        .sortable:hover {
             background-color: #f8f9fa;
         }
         
-        .table tbody tr {
-            transition: background-color 0.2s;
+        .sort-icon {
+            font-size: 0.8rem;
+            margin-left: 5px;
+            opacity: 0.5;
         }
         
-        .table tbody tr:hover {
-            background-color: #f8f9fa;
+        .sort-icon.active {
+            opacity: 1;
         }
         
-        .pagination-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            background-color: white;
-            border-top: 1px solid #dee2e6;
-        }
-        
-        .results-info {
-            color: #6c757d;
-            font-size: 0.875rem;
-        }
-        
-        .filter-section {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .loading-spinner {
-            display: none;
-            text-align: center;
-            padding: 40px;
-        }
-        
-        .spinner-border {
-            width: 3rem;
-            height: 3rem;
-        }
-        
-        .no-results {
-            display: none;
-            text-align: center;
-            padding: 60px 20px;
-            color: #6c757d;
-        }
-        
-        .no-results i {
-            font-size: 4rem;
-            margin-bottom: 20px;
-        }
-        
-        .export-btn {
+        .table-responsive {
             position: relative;
         }
         
-        .message-cell {
-            max-width: 400px;
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .loading-overlay.show {
+            display: flex;
+        }
+        
+        .truncate {
+            max-width: 300px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
         
-        .timestamp-cell {
-            white-space: nowrap;
-            font-size: 0.875rem;
+        .initial-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #6c757d;
+        }
+        
+        .initial-state i {
+            font-size: 5rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+        
+        .pagination {
+            margin-top: 1rem;
+        }
+        
+        .advanced-filters {
+            display: none;
+        }
+        
+        .advanced-filters.show {
+            display: block;
         }
     </style>
 </head>
 <body>
-    <!-- Navigation -->
+    <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
@@ -179,7 +123,7 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link active" href="/search">
-                            <i class="bi bi-search me-1"></i>Search Logs
+                            <i class="bi bi-search me-1"></i>Search
                         </a>
                     </li>
                 </ul>
@@ -188,422 +132,633 @@
     </nav>
 
     <!-- Main Content -->
-    <div class="container-fluid mt-4 mb-5">
-        <div class="row">
+    <div class="container-fluid py-4">
+        <div class="row mb-4">
             <div class="col-12">
-                <h2 class="mb-4">
-                    <i class="bi bi-search me-2"></i>Search Logs
+                <h2 class="mb-3">
+                    <i class="bi bi-search me-2 text-primary"></i>
+                    Search Logs
                 </h2>
-                
-                <!-- Filter Section -->
-                <div class="card filter-section">
-                    <div class="row g-3">
-                        <!-- Search Text -->
-                        <div class="col-md-12">
-                            <label for="searchText" class="form-label">
-                                <i class="bi bi-search me-1"></i>Search
-                            </label>
-                            <input type="text" class="form-control" id="searchText" 
-                                   placeholder="Search in messages, endpoints, user IDs...">
+            </div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <!-- Main Search Input -->
+                        <div class="input-group input-group-lg mb-3">
+                            <span class="input-group-text bg-white">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" 
+                                   class="form-control search-box border-start-0" 
+                                   id="searchQuery" 
+                                   placeholder="Search in messages, endpoints, user agents..."
+                                   onkeypress="if(event.key === 'Enter') performSearch()">
                         </div>
-                        
-                        <!-- Log Level -->
-                        <div class="col-md-3">
-                            <label for="logLevel" class="form-label">
-                                <i class="bi bi-bar-chart-steps me-1"></i>Log Level
-                            </label>
-                            <select class="form-select" id="logLevel">
-                                <option value="">All Levels</option>
-                                <option value="DEBUG">DEBUG</option>
-                                <option value="INFO">INFO</option>
-                                <option value="WARNING">WARNING</option>
-                                <option value="ERROR">ERROR</option>
-                                <option value="CRITICAL">CRITICAL</option>
-                            </select>
+
+                        <!-- Toggle Advanced Filters Button -->
+                        <div class="mb-3">
+                            <button class="btn btn-outline-secondary btn-sm" 
+                                    type="button" 
+                                    onclick="toggleAdvancedFilters()">
+                                <i class="bi bi-funnel me-1"></i>
+                                <span id="filterToggleText">Show Advanced Filters</span>
+                            </button>
                         </div>
-                        
-                        <!-- Endpoint -->
-                        <div class="col-md-3">
-                            <label for="endpoint" class="form-label">
-                                <i class="bi bi-link-45deg me-1"></i>Endpoint
-                            </label>
-                            <input type="text" class="form-control" id="endpoint" 
-                                   placeholder="e.g., /api/users">
+
+                        <!-- Advanced Filters -->
+                        <div class="advanced-filters" id="advancedFilters">
+                            <div class="row g-3 mb-3">
+                                <!-- Log Level -->
+                                <div class="col-md-3">
+                                    <label class="form-label">Log Level</label>
+                                    <select class="form-select" id="filterLevel">
+                                        <option value="">ALL</option>
+                                        <option value="DEBUG">DEBUG</option>
+                                        <option value="INFO">INFO</option>
+                                        <option value="WARNING">WARNING</option>
+                                        <option value="ERROR">ERROR</option>
+                                        <option value="CRITICAL">CRITICAL</option>
+                                    </select>
+                                </div>
+
+                                <!-- Date From -->
+                                <div class="col-md-3">
+                                    <label class="form-label">Date From</label>
+                                    <input type="datetime-local" class="form-control" id="filterDateFrom">
+                                </div>
+
+                                <!-- Date To -->
+                                <div class="col-md-3">
+                                    <label class="form-label">Date To</label>
+                                    <input type="datetime-local" class="form-control" id="filterDateTo">
+                                </div>
+
+                                <!-- Status Code -->
+                                <div class="col-md-3">
+                                    <label class="form-label">Status Code</label>
+                                    <select class="form-select" id="filterStatus">
+                                        <option value="">ALL</option>
+                                        <option value="2xx">2xx (Success)</option>
+                                        <option value="4xx">4xx (Client Error)</option>
+                                        <option value="5xx">5xx (Server Error)</option>
+                                        <option value="200">200 (OK)</option>
+                                        <option value="404">404 (Not Found)</option>
+                                        <option value="500">500 (Internal Error)</option>
+                                    </select>
+                                </div>
+
+                                <!-- Endpoint -->
+                                <div class="col-md-4">
+                                    <label class="form-label">Endpoint</label>
+                                    <select class="form-select" id="filterEndpoint">
+                                        <option value="">ALL</option>
+                                    </select>
+                                </div>
+
+                                <!-- Server -->
+                                <div class="col-md-4">
+                                    <label class="form-label">Server</label>
+                                    <select class="form-select" id="filterServer">
+                                        <option value="">ALL</option>
+                                        <option value="server-01">server-01</option>
+                                        <option value="server-02">server-02</option>
+                                        <option value="server-03">server-03</option>
+                                        <option value="server-04">server-04</option>
+                                        <option value="server-05">server-05</option>
+                                    </select>
+                                </div>
+
+                                <!-- Results Per Page -->
+                                <div class="col-md-4">
+                                    <label class="form-label">Results Per Page</label>
+                                    <select class="form-select" id="filterPerPage">
+                                        <option value="25">25</option>
+                                        <option value="50" selected>50</option>
+                                        <option value="100">100</option>
+                                        <option value="200">200</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
-                        
-                        <!-- Start Date -->
-                        <div class="col-md-3">
-                            <label for="startDate" class="form-label">
-                                <i class="bi bi-calendar-event me-1"></i>Start Date
-                            </label>
-                            <input type="datetime-local" class="form-control" id="startDate">
-                        </div>
-                        
-                        <!-- End Date -->
-                        <div class="col-md-3">
-                            <label for="endDate" class="form-label">
-                                <i class="bi bi-calendar-check me-1"></i>End Date
-                            </label>
-                            <input type="datetime-local" class="form-control" id="endDate">
-                        </div>
-                        
+
                         <!-- Action Buttons -->
-                        <div class="col-md-12">
-                            <button class="btn btn-primary" id="searchBtn">
-                                <i class="bi bi-search me-2"></i>Search
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" onclick="performSearch()">
+                                <i class="bi bi-search me-1"></i>Search
                             </button>
-                            <button class="btn btn-secondary" id="clearBtn">
-                                <i class="bi bi-x-circle me-2"></i>Clear Filters
-                            </button>
-                            <button class="btn btn-success export-btn" id="exportBtn">
-                                <i class="bi bi-file-earmark-spreadsheet me-2"></i>Export to CSV
+                            <button class="btn btn-outline-secondary" onclick="resetSearch()">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Reset
                             </button>
                         </div>
                     </div>
                 </div>
-                
-                <!-- Results Card -->
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="row" id="resultsSection" style="display: none;">
+            <div class="col-12">
                 <div class="card">
-                    <!-- Loading Spinner -->
-                    <div class="loading-spinner" id="loadingSpinner">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0">Search Results</h5>
+                            <small class="text-muted" id="resultsInfo"></small>
                         </div>
-                        <p class="mt-3">Searching logs...</p>
+                        <button class="btn btn-success btn-sm" onclick="exportToCSV()" id="exportBtn" disabled>
+                            <i class="bi bi-download me-1"></i>Export to CSV
+                        </button>
                     </div>
-                    
-                    <!-- No Results -->
-                    <div class="no-results" id="noResults">
-                        <i class="bi bi-inbox text-muted"></i>
-                        <h4>No Logs Found</h4>
-                        <p>Try adjusting your search filters or criteria.</p>
-                    </div>
-                    
-                    <!-- Results Table -->
-                    <div class="table-container" id="resultsContainer" style="display: none;">
+                    <div class="card-body p-0">
                         <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
+                            <!-- Loading Overlay -->
+                            <div class="loading-overlay" id="loadingOverlay">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+
+                            <!-- Results Table -->
+                            <table class="table table-hover mb-0" id="resultsTable">
+                                <thead class="table-light">
                                     <tr>
-                                        <th>Timestamp</th>
-                                        <th>Level</th>
-                                        <th>Endpoint</th>
-                                        <th>User ID</th>
+                                        <th class="sortable" onclick="sortBy('timestamp')">
+                                            Timestamp
+                                            <i class="bi bi-chevron-down sort-icon" id="sort-timestamp"></i>
+                                        </th>
+                                        <th class="sortable" onclick="sortBy('level')">
+                                            Level
+                                            <i class="bi bi-chevron-down sort-icon" id="sort-level"></i>
+                                        </th>
+                                        <th class="sortable" onclick="sortBy('endpoint')">
+                                            Endpoint
+                                            <i class="bi bi-chevron-down sort-icon" id="sort-endpoint"></i>
+                                        </th>
+                                        <th class="sortable" onclick="sortBy('status_code')">
+                                            Status
+                                            <i class="bi bi-chevron-down sort-icon" id="sort-status_code"></i>
+                                        </th>
+                                        <th class="sortable" onclick="sortBy('response_time_ms')">
+                                            Response Time
+                                            <i class="bi bi-chevron-down sort-icon" id="sort-response_time_ms"></i>
+                                        </th>
                                         <th>Message</th>
-                                        <th>Response Time</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody id="resultsTableBody">
-                                    <!-- Results will be inserted here -->
+                                <tbody id="resultsBody">
+                                    <!-- Initial State -->
+                                    <tr id="initialState">
+                                        <td colspan="7" class="initial-state">
+                                            <i class="bi bi-search"></i>
+                                            <h4>Start Your Search</h4>
+                                            <p>Use the search box and filters above to find logs</p>
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- Empty State (hidden by default) -->
+                                    <tr id="emptyState" style="display: none;">
+                                        <td colspan="7" class="initial-state">
+                                            <i class="bi bi-inbox"></i>
+                                            <h4>No Results Found</h4>
+                                            <p>Try adjusting your search criteria</p>
+                                        </td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
-                        
+
                         <!-- Pagination -->
-                        <div class="pagination-container">
-                            <div class="results-info" id="resultsInfo">
-                                Showing 0 - 0 of 0 results
-                            </div>
-                            <nav>
-                                <ul class="pagination mb-0" id="paginationNav">
-                                    <!-- Pagination will be inserted here -->
-                                </ul>
-                            </nav>
-                        </div>
+                        <nav aria-label="Search results pagination" class="p-3" id="paginationContainer" style="display: none;">
+                            <ul class="pagination justify-content-center mb-0" id="pagination"></ul>
+                        </nav>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Bootstrap 5 JS -->
+    <!-- Log Details Modal -->
+    <div class="modal fade" id="logDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-file-text me-2"></i>Log Details
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="logDetailsContent">
+                    <!-- Will be populated dynamically -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
+    <!-- Custom JavaScript -->
     <script>
+        // State management
         let currentPage = 1;
-        let totalPages = 1;
-        let currentFilters = {};
-        
-        const searchBtn = document.getElementById('searchBtn');
-        const clearBtn = document.getElementById('clearBtn');
-        const exportBtn = document.getElementById('exportBtn');
-        const loadingSpinner = document.getElementById('loadingSpinner');
-        const noResults = document.getElementById('noResults');
-        const resultsContainer = document.getElementById('resultsContainer');
-        const resultsTableBody = document.getElementById('resultsTableBody');
-        const resultsInfo = document.getElementById('resultsInfo');
-        const paginationNav = document.getElementById('paginationNav');
-        
-        // Initialize - load logs on page load
-        window.addEventListener('DOMContentLoaded', () => {
-            searchLogs(1);
+        let currentSort = { field: 'timestamp', order: 'desc' };
+        let searchResults = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadEndpoints();
+            updateSortIcon('timestamp', 'desc');
         });
-        
-        // Search button click
-        searchBtn.addEventListener('click', () => {
-            currentPage = 1;
-            searchLogs(1);
-        });
-        
-        // Clear button click
-        clearBtn.addEventListener('click', () => {
-            document.getElementById('searchText').value = '';
-            document.getElementById('logLevel').value = '';
-            document.getElementById('endpoint').value = '';
-            document.getElementById('startDate').value = '';
-            document.getElementById('endDate').value = '';
-            currentPage = 1;
-            searchLogs(1);
-        });
-        
-        // Export button click
-        exportBtn.addEventListener('click', () => {
-            exportToCSV();
-        });
-        
-        // Enter key in search text
-        document.getElementById('searchText').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                currentPage = 1;
-                searchLogs(1);
+
+        // Toggle advanced filters
+        function toggleAdvancedFilters() {
+            const filters = document.getElementById('advancedFilters');
+            const toggleText = document.getElementById('filterToggleText');
+            
+            if (filters.classList.contains('show')) {
+                filters.classList.remove('show');
+                toggleText.textContent = 'Show Advanced Filters';
+            } else {
+                filters.classList.add('show');
+                toggleText.textContent = 'Hide Advanced Filters';
             }
-        });
-        
-        // Search logs function
-        function searchLogs(page) {
-            // Get filter values
-            const searchText = document.getElementById('searchText').value.trim();
-            const logLevel = document.getElementById('logLevel').value;
-            const endpoint = document.getElementById('endpoint').value.trim();
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
+        }
+
+        // Load endpoints for filter dropdown
+        async function loadEndpoints() {
+            try {
+                const response = await fetch('/api/search/endpoints');
+                const data = await response.json();
+                
+                if (data.success && data.endpoints) {
+                    const select = document.getElementById('filterEndpoint');
+                    data.endpoints.forEach(endpoint => {
+                        const option = document.createElement('option');
+                        option.value = endpoint;
+                        option.textContent = endpoint;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading endpoints:', error);
+            }
+        }
+
+        // Perform search
+        async function performSearch(page = 1) {
+            currentPage = page;
             
-            // Build query parameters
-            const params = new URLSearchParams();
-            params.append('page', page);
-            params.append('per_page', 50);
-            
-            if (searchText) params.append('q', searchText);
-            if (logLevel) params.append('level', logLevel);
-            if (endpoint) params.append('endpoint', endpoint);
-            if (startDate) params.append('start_date', startDate);
-            if (endDate) params.append('end_date', endDate);
-            
-            // Store current filters for export
-            currentFilters = {
-                q: searchText,
-                level: logLevel,
-                endpoint: endpoint,
-                start_date: startDate,
-                end_date: endDate
+            // Build search parameters
+            const params = {
+                q: document.getElementById('searchQuery').value.trim(),
+                level: document.getElementById('filterLevel').value,
+                date_from: document.getElementById('filterDateFrom').value,
+                date_to: document.getElementById('filterDateTo').value,
+                endpoint: document.getElementById('filterEndpoint').value,
+                status_code: document.getElementById('filterStatus').value,
+                server: document.getElementById('filterServer').value,
+                page: page,
+                per_page: parseInt(document.getElementById('filterPerPage').value),
+                sort_field: currentSort.field,
+                sort_order: currentSort.order
             };
-            
-            // Show loading
-            loadingSpinner.style.display = 'block';
-            noResults.style.display = 'none';
-            resultsContainer.style.display = 'none';
-            
-            // Fetch results
-            fetch(`/api/logs/search?${params.toString()}`)
-                .then(response => response.json())
-                .then(data => {
-                    loadingSpinner.style.display = 'none';
-                    
-                    if (data.success && data.logs.length > 0) {
-                        displayResults(data.logs, data.pagination);
-                    } else {
-                        noResults.style.display = 'block';
-                    }
-                })
-                .catch(error => {
-                    loadingSpinner.style.display = 'none';
-                    console.error('Error searching logs:', error);
-                    alert('Error searching logs. Please try again.');
+
+            // Show loading overlay
+            document.getElementById('loadingOverlay').classList.add('show');
+            document.getElementById('resultsSection').style.display = 'block';
+            document.getElementById('initialState').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
                 });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    searchResults = data;
+                    renderResults(data);
+                    renderPagination(data);
+                    updateResultsInfo(data);
+                    document.getElementById('exportBtn').disabled = false;
+                } else {
+                    throw new Error(data.error || 'Search failed');
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                alert('Search failed: ' + error.message);
+            } finally {
+                document.getElementById('loadingOverlay').classList.remove('show');
+            }
         }
-        
-        // Display results
-        function displayResults(logs, pagination) {
-            // Clear previous results
-            resultsTableBody.innerHTML = '';
+
+        // Render results
+        function renderResults(data) {
+            const tbody = document.getElementById('resultsBody');
             
-            // Populate table
-            logs.forEach(log => {
+            if (!data.results || data.results.length === 0) {
+                tbody.innerHTML = '';
+                document.getElementById('emptyState').style.display = '';
+                document.getElementById('paginationContainer').style.display = 'none';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            
+            data.results.forEach(log => {
                 const row = document.createElement('tr');
+                
+                // Timestamp
+                const timestamp = new Date(log.timestamp);
+                const formattedTime = timestamp.toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+
+                // Level badge
+                let levelClass = 'secondary';
+                if (log.level === 'ERROR' || log.level === 'CRITICAL') levelClass = 'danger';
+                else if (log.level === 'WARNING') levelClass = 'warning';
+                else if (log.level === 'INFO') levelClass = 'info';
+                else if (log.level === 'DEBUG') levelClass = 'secondary';
+
+                // Status class
+                let statusClass = '';
+                if (log.status_code >= 200 && log.status_code < 300) statusClass = 'status-2xx';
+                else if (log.status_code >= 400 && log.status_code < 500) statusClass = 'status-4xx';
+                else if (log.status_code >= 500) statusClass = 'status-5xx';
+
+                // Response time class
+                let responseClass = 'response-fast';
+                if (log.response_time_ms > 1000) responseClass = 'response-slow';
+                else if (log.response_time_ms > 500) responseClass = 'response-medium';
+
+                // Truncate message
+                const message = log.message || '-';
+                const truncatedMessage = message.length > 100 ? message.substring(0, 100) + '...' : message;
+
                 row.innerHTML = `
-                    <td class="timestamp-cell">${formatTimestamp(log['@timestamp'] || log.timestamp)}</td>
-                    <td><span class="log-level-badge log-level-${log.level || 'INFO'}">${log.level || 'INFO'}</span></td>
-                    <td>${escapeHtml(log.endpoint || 'N/A')}</td>
-                    <td>${escapeHtml(log.user_id || 'N/A')}</td>
-                    <td class="message-cell" title="${escapeHtml(log.message || 'N/A')}">${escapeHtml(log.message || 'N/A')}</td>
-                    <td>${log.response_time ? log.response_time + 'ms' : 'N/A'}</td>
+                    <td>${formattedTime}</td>
+                    <td>
+                        <span class="badge bg-${levelClass} badge-level">${log.level}</span>
+                    </td>
+                    <td><code>${log.endpoint || '-'}</code></td>
+                    <td><span class="${statusClass}">${log.status_code || '-'}</span></td>
+                    <td><span class="${responseClass}">${log.response_time_ms || 0} ms</span></td>
+                    <td>
+                        <span class="truncate" title="${message}">${truncatedMessage}</span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="viewDetails('${log._id}')">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </td>
                 `;
-                resultsTableBody.appendChild(row);
+                
+                tbody.appendChild(row);
             });
-            
-            // Update pagination info
-            const start = (pagination.page - 1) * pagination.per_page + 1;
-            const end = Math.min(pagination.page * pagination.per_page, pagination.total);
-            resultsInfo.textContent = `Showing ${start} - ${end} of ${pagination.total} results`;
-            
-            // Update pagination controls
-            currentPage = pagination.page;
-            totalPages = pagination.total_pages;
-            updatePagination(pagination);
-            
-            // Show results
-            resultsContainer.style.display = 'block';
         }
-        
-        // Update pagination
-        function updatePagination(pagination) {
-            paginationNav.innerHTML = '';
+
+        // Render pagination
+        function renderPagination(data) {
+            const container = document.getElementById('pagination');
+            const paginationContainer = document.getElementById('paginationContainer');
             
+            if (data.pages <= 1) {
+                paginationContainer.style.display = 'none';
+                return;
+            }
+
+            paginationContainer.style.display = 'block';
+            container.innerHTML = '';
+
             // Previous button
             const prevLi = document.createElement('li');
-            prevLi.className = `page-item ${!pagination.has_prev ? 'disabled' : ''}`;
-            prevLi.innerHTML = `
-                <a class="page-link" href="#" data-page="${pagination.page - 1}">
-                    <i class="bi bi-chevron-left"></i>
-                </a>
-            `;
-            paginationNav.appendChild(prevLi);
-            
-            // Page numbers
-            const maxPages = 5;
-            let startPage = Math.max(1, pagination.page - Math.floor(maxPages / 2));
-            let endPage = Math.min(pagination.total_pages, startPage + maxPages - 1);
-            
-            if (endPage - startPage < maxPages - 1) {
-                startPage = Math.max(1, endPage - maxPages + 1);
-            }
-            
-            // First page
-            if (startPage > 1) {
-                const firstLi = createPageItem(1, pagination.page === 1);
-                paginationNav.appendChild(firstLi);
-                
-                if (startPage > 2) {
-                    const ellipsisLi = document.createElement('li');
-                    ellipsisLi.className = 'page-item disabled';
-                    ellipsisLi.innerHTML = '<a class="page-link">...</a>';
-                    paginationNav.appendChild(ellipsisLi);
-                }
-            }
-            
-            // Page numbers
+            prevLi.className = `page-item ${data.page <= 1 ? 'disabled' : ''}`;
+            prevLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${data.page - 1}); return false;">Previous</a>`;
+            container.appendChild(prevLi);
+
+            // Page numbers (max 10 visible)
+            const startPage = Math.max(1, data.page - 5);
+            const endPage = Math.min(data.pages, startPage + 9);
+
             for (let i = startPage; i <= endPage; i++) {
-                const pageLi = createPageItem(i, pagination.page === i);
-                paginationNav.appendChild(pageLi);
+                const li = document.createElement('li');
+                li.className = `page-item ${i === data.page ? 'active' : ''}`;
+                li.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>`;
+                container.appendChild(li);
             }
-            
-            // Last page
-            if (endPage < pagination.total_pages) {
-                if (endPage < pagination.total_pages - 1) {
-                    const ellipsisLi = document.createElement('li');
-                    ellipsisLi.className = 'page-item disabled';
-                    ellipsisLi.innerHTML = '<a class="page-link">...</a>';
-                    paginationNav.appendChild(ellipsisLi);
-                }
-                
-                const lastLi = createPageItem(pagination.total_pages, pagination.page === pagination.total_pages);
-                paginationNav.appendChild(lastLi);
-            }
-            
+
             // Next button
             const nextLi = document.createElement('li');
-            nextLi.className = `page-item ${!pagination.has_next ? 'disabled' : ''}`;
-            nextLi.innerHTML = `
-                <a class="page-link" href="#" data-page="${pagination.page + 1}">
-                    <i class="bi bi-chevron-right"></i>
-                </a>
-            `;
-            paginationNav.appendChild(nextLi);
-            
-            // Add click handlers
-            paginationNav.querySelectorAll('.page-link').forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const page = parseInt(e.currentTarget.dataset.page);
-                    if (page && page !== pagination.page) {
-                        searchLogs(page);
-                    }
-                });
+            nextLi.className = `page-item ${data.page >= data.pages ? 'disabled' : ''}`;
+            nextLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${data.page + 1}); return false;">Next</a>`;
+            container.appendChild(nextLi);
+        }
+
+        // Change page
+        function changePage(page) {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            performSearch(page);
+        }
+
+        // Update results info
+        function updateResultsInfo(data) {
+            const start = (data.page - 1) * data.per_page + 1;
+            const end = Math.min(data.page * data.per_page, data.total);
+            document.getElementById('resultsInfo').textContent = 
+                `Showing ${start}-${end} of ${data.total.toLocaleString()} results`;
+        }
+
+        // Sort by field
+        function sortBy(field) {
+            if (currentSort.field === field) {
+                // Toggle order
+                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                // New field, default to descending
+                currentSort.field = field;
+                currentSort.order = 'desc';
+            }
+
+            updateSortIcon(field, currentSort.order);
+            performSearch(currentPage);
+        }
+
+        // Update sort icon
+        function updateSortIcon(field, order) {
+            // Remove active class from all icons
+            document.querySelectorAll('.sort-icon').forEach(icon => {
+                icon.classList.remove('active', 'bi-chevron-up', 'bi-chevron-down');
+                icon.classList.add('bi-chevron-down');
             });
+
+            // Set active icon
+            const icon = document.getElementById(`sort-${field}`);
+            if (icon) {
+                icon.classList.add('active');
+                icon.classList.remove('bi-chevron-down', 'bi-chevron-up');
+                icon.classList.add(order === 'asc' ? 'bi-chevron-up' : 'bi-chevron-down');
+            }
         }
-        
-        // Create page item
-        function createPageItem(pageNum, isActive) {
-            const li = document.createElement('li');
-            li.className = `page-item ${isActive ? 'active' : ''}`;
-            li.innerHTML = `<a class="page-link" href="#" data-page="${pageNum}">${pageNum}</a>`;
-            return li;
+
+        // View details
+        function viewDetails(logId) {
+            const log = searchResults.results.find(l => l._id === logId);
+            if (!log) return;
+
+            const timestamp = new Date(log.timestamp).toLocaleString();
+            let levelClass = 'secondary';
+            if (log.level === 'ERROR' || log.level === 'CRITICAL') levelClass = 'danger';
+            else if (log.level === 'WARNING') levelClass = 'warning';
+            else if (log.level === 'INFO') levelClass = 'info';
+
+            const content = `
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <strong>Timestamp:</strong><br>
+                        ${timestamp}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Level:</strong><br>
+                        <span class="badge bg-${levelClass}">${log.level}</span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Endpoint:</strong><br>
+                        <code>${log.endpoint || '-'}</code>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Method:</strong><br>
+                        ${log.method || '-'}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Status Code:</strong><br>
+                        ${log.status_code || '-'}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Response Time:</strong><br>
+                        ${log.response_time_ms || 0} ms
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Client IP:</strong><br>
+                        ${log.client_ip || '-'}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>User ID:</strong><br>
+                        ${log.user_id || 'Anonymous'}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Server:</strong><br>
+                        ${log.server || '-'}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Tenant ID:</strong><br>
+                        ${log.tenant_id || '-'}
+                    </div>
+                    <div class="col-12">
+                        <strong>Message:</strong><br>
+                        <p class="mb-0">${log.message || '-'}</p>
+                    </div>
+                    <div class="col-12">
+                        <strong>User Agent:</strong><br>
+                        <small class="text-muted">${log.user_agent || '-'}</small>
+                    </div>
+                    ${log.sql_query ? `
+                        <div class="col-12">
+                            <strong>SQL Query:</strong><br>
+                            <code class="d-block p-2 bg-light">${log.sql_query}</code>
+                            <small class="text-muted">Duration: ${log.query_duration_ms || 0} ms</small>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            document.getElementById('logDetailsContent').innerHTML = content;
+            const modal = new bootstrap.Modal(document.getElementById('logDetailsModal'));
+            modal.show();
         }
-        
+
         // Export to CSV
         function exportToCSV() {
-            exportBtn.disabled = true;
-            exportBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Exporting...';
+            if (!searchResults || !searchResults.results || searchResults.results.length === 0) {
+                alert('No results to export');
+                return;
+            }
+
+            const headers = ['Timestamp', 'Level', 'Endpoint', 'Method', 'Status Code', 'Response Time (ms)', 'Client IP', 'User ID', 'Server', 'Tenant ID', 'Message', 'User Agent'];
+            const rows = searchResults.results.map(log => [
+                log.timestamp,
+                log.level,
+                log.endpoint || '',
+                log.method || '',
+                log.status_code || '',
+                log.response_time_ms || '',
+                log.client_ip || '',
+                log.user_id || '',
+                log.server || '',
+                log.tenant_id || '',
+                `"${(log.message || '').replace(/"/g, '""')}"`,
+                `"${(log.user_agent || '').replace(/"/g, '""')}"`
+            ]);
+
+            let csv = headers.join(',') + '\n';
+            rows.forEach(row => {
+                csv += row.join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `logs_export_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Reset search
+        function resetSearch() {
+            document.getElementById('searchQuery').value = '';
+            document.getElementById('filterLevel').value = '';
+            document.getElementById('filterDateFrom').value = '';
+            document.getElementById('filterDateTo').value = '';
+            document.getElementById('filterEndpoint').value = '';
+            document.getElementById('filterStatus').value = '';
+            document.getElementById('filterServer').value = '';
+            document.getElementById('filterPerPage').value = '50';
             
-            fetch('/api/logs/export', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(currentFilters)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Export failed');
-                }
-                return response.blob();
-            })
-            .then(blob => {
-                // Create download link
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `logs_export_${new Date().toISOString().slice(0,10)}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                exportBtn.disabled = false;
-                exportBtn.innerHTML = '<i class="bi bi-file-earmark-spreadsheet me-2"></i>Export to CSV';
-            })
-            .catch(error => {
-                console.error('Error exporting logs:', error);
-                alert('Error exporting logs. Please try again.');
-                exportBtn.disabled = false;
-                exportBtn.innerHTML = '<i class="bi bi-file-earmark-spreadsheet me-2"></i>Export to CSV';
-            });
-        }
-        
-        // Format timestamp
-        function formatTimestamp(timestamp) {
-            if (!timestamp) return 'N/A';
-            const date = new Date(timestamp);
-            return date.toLocaleString('en-US', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-        }
-        
-        // Escape HTML to prevent XSS
-        function escapeHtml(text) {
-            const map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            };
-            return String(text).replace(/[&<>"']/g, m => map[m]);
+            currentPage = 1;
+            currentSort = { field: 'timestamp', order: 'desc' };
+            searchResults = null;
+            
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('resultsBody').innerHTML = `
+                <tr id="initialState">
+                    <td colspan="7" class="initial-state">
+                        <i class="bi bi-search"></i>
+                        <h4>Start Your Search</h4>
+                        <p>Use the search box and filters above to find logs</p>
+                    </td>
+                </tr>
+            `;
+            document.getElementById('exportBtn').disabled = true;
+            
+            updateSortIcon('timestamp', 'desc');
         }
     </script>
 </body>

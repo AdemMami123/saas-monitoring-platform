@@ -148,74 +148,187 @@
     </nav>
 
     <div class="container-fluid py-4">
-        <!-- System Health Status -->
+        <!-- Top Row: 3 Big KPI Cards -->
         <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
+            <!-- Total Logs (24h) -->
+            <div class="col-md-4">
+                <div class="card kpi-card h-100">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5 class="section-title mb-0">
-                                <i class="bi bi-heartbeat"></i> System Health
-                            </h5>
-                            <span class="status-badge" id="overallStatus">
-                                <span class="loading"></span> Checking...
-                            </span>
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="kpi-label">TOTAL LOGS (24H)</div>
+                                <div class="kpi-value" id="totalLogs24h">
+                                    <span class="loading"></span>
+                                </div>
+                                <small class="text-muted">Last 24 hours</small>
+                            </div>
+                            <div class="text-primary" style="font-size: 2.5rem;">
+                                <i class="bi bi-file-text"></i>
+                            </div>
                         </div>
-                        
-                        <div class="row g-3" id="healthCards">
-                            <!-- Health cards will be inserted here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Error Rate -->
+            <div class="col-md-4">
+                <div class="card h-100" style="border-left: 4px solid #dc3545;">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="kpi-label">ERROR RATE</div>
+                                <div class="kpi-value" id="errorRate">
+                                    <span class="loading"></span>
+                                </div>
+                                <small class="text-muted">5xx errors / total</small>
+                            </div>
+                            <div style="font-size: 2.5rem;" id="errorRateIcon">
+                                <i class="bi bi-exclamation-triangle"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Avg Response Time -->
+            <div class="col-md-4">
+                <div class="card h-100" style="border-left: 4px solid #0dcaf0;">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="kpi-label">AVG RESPONSE TIME</div>
+                                <div class="kpi-value" id="avgResponseTime">
+                                    <span class="loading"></span>
+                                </div>
+                                <small class="text-muted">Last 24 hours</small>
+                            </div>
+                            <div style="font-size: 2.5rem;" id="responseTimeIcon">
+                                <i class="bi bi-speedometer2"></i>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- KPI Cards -->
+        <!-- Second Row: 3 Medium Cards -->
         <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card kpi-card">
+            <!-- Active Users -->
+            <div class="col-md-4">
+                <div class="card h-100" style="border-left: 4px solid #20c997;">
                     <div class="card-body text-center">
-                        <div class="kpi-label">Total Logs</div>
-                        <div class="kpi-value" id="totalLogs">
+                        <i class="bi bi-people-fill text-info" style="font-size: 2rem;"></i>
+                        <div class="kpi-label mt-2">ACTIVE USERS</div>
+                        <div class="kpi-value text-info" id="activeUsers">
                             <span class="loading"></span>
                         </div>
-                        <small class="text-muted">All indices</small>
+                        <small class="text-muted">Last 24 hours</small>
                     </div>
                 </div>
             </div>
             
-            <div class="col-md-3">
-                <div class="card" style="border-left: 4px solid #198754;">
+            <!-- Files Uploaded -->
+            <div class="col-md-4">
+                <div class="card h-100" style="border-left: 4px solid #6f42c1;">
                     <div class="card-body text-center">
-                        <div class="kpi-label">Elasticsearch</div>
-                        <div class="kpi-value text-success" id="esStatus">
-                            <i class="bi bi-circle-fill" style="font-size: 1rem;"></i>
+                        <i class="bi bi-cloud-upload-fill" style="font-size: 2rem; color: #6f42c1;"></i>
+                        <div class="kpi-label mt-2">FILES UPLOADED</div>
+                        <div class="kpi-value" style="color: #6f42c1;" id="filesUploaded">
+                            <span class="loading"></span>
                         </div>
-                        <small class="text-muted" id="esHost">-</small>
+                        <small class="text-muted">Total uploads</small>
                     </div>
                 </div>
             </div>
             
-            <div class="col-md-3">
-                <div class="card" style="border-left: 4px solid #20c997;">
-                    <div class="card-body text-center">
-                        <div class="kpi-label">MongoDB</div>
-                        <div class="kpi-value text-info" id="mongoStatus">
-                            <i class="bi bi-circle-fill" style="font-size: 1rem;"></i>
+            <!-- System Health -->
+            <div class="col-md-4">
+                <div class="card h-100" style="border-left: 4px solid #198754;">
+                    <div class="card-body">
+                        <div class="kpi-label">SYSTEM HEALTH</div>
+                        <div class="d-flex justify-content-around mt-3">
+                            <div class="text-center">
+                                <i class="bi bi-search service-icon" id="esIcon" title="Elasticsearch"></i>
+                                <div><small>ES</small></div>
+                            </div>
+                            <div class="text-center">
+                                <i class="bi bi-database service-icon" id="mongoIcon" title="MongoDB"></i>
+                                <div><small>Mongo</small></div>
+                            </div>
+                            <div class="text-center">
+                                <i class="bi bi-lightning-charge service-icon" id="redisIcon" title="Redis"></i>
+                                <div><small>Redis</small></div>
+                            </div>
                         </div>
-                        <small class="text-muted" id="mongoHost">-</small>
+                        <div class="text-center mt-2">
+                            <span class="badge" id="systemHealthBadge">
+                                <span class="loading"></span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Third Row: 2 Sections -->
+        <div class="row mb-4">
+            <!-- Top 3 Slowest Endpoints -->
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header bg-white">
+                        <h5 class="section-title mb-0">
+                            <i class="bi bi-clock-history text-warning"></i> Top 3 Slowest Endpoints
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="slowestEndpointsLoading" class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <div class="table-responsive" id="slowestEndpointsTable" style="display: none;">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Endpoint</th>
+                                        <th>Avg Response Time</th>
+                                        <th>Requests</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="slowestEndpointsBody">
+                                    <!-- Will be populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="slowestEndpointsEmpty" class="text-center text-muted py-4" style="display: none;">
+                            <i class="bi bi-inbox fs-3"></i>
+                            <p>No data available</p>
+                        </div>
                     </div>
                 </div>
             </div>
             
-            <div class="col-md-3">
-                <div class="card" style="border-left: 4px solid #dc3545;">
-                    <div class="card-body text-center">
-                        <div class="kpi-label">Redis Cache</div>
-                        <div class="kpi-value text-danger" id="redisStatus">
-                            <i class="bi bi-circle-fill" style="font-size: 1rem;"></i>
+            <!-- Latest Error -->
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header bg-white">
+                        <h5 class="section-title mb-0">
+                            <i class="bi bi-exclamation-triangle-fill text-danger"></i> Latest Error
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="latestErrorLoading" class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
                         </div>
-                        <small class="text-muted" id="redisMemory">-</small>
+                        <div id="latestErrorContent" style="display: none;">
+                            <!-- Will be populated dynamically -->
+                        </div>
+                        <div id="latestErrorEmpty" class="alert alert-success" role="alert" style="display: none;">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            No errors found! System is running smoothly.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -357,9 +470,123 @@
                 const response = await fetch('/api/stats');
                 const data = await response.json();
                 
-                // Update total logs
-                document.getElementById('totalLogs').textContent = 
-                    data.total_logs.toLocaleString();
+                // Update Top Row KPIs
+                // Total Logs 24h
+                document.getElementById('totalLogs24h').textContent = 
+                    data.total_logs_24h.toLocaleString();
+                
+                // Error Rate with color coding
+                const errorRate = parseFloat(data.error_rate.toFixed(2));
+                const errorRateEl = document.getElementById('errorRate');
+                errorRateEl.textContent = errorRate + '%';
+                if (errorRate < 1) {
+                    errorRateEl.style.color = '#198754'; // green
+                } else if (errorRate < 5) {
+                    errorRateEl.style.color = '#ffc107'; // yellow
+                } else {
+                    errorRateEl.style.color = '#dc3545'; // red
+                }
+                
+                // Average Response Time with color coding
+                const avgResponseTime = Math.round(data.avg_response_time);
+                const avgResponseTimeEl = document.getElementById('avgResponseTime');
+                avgResponseTimeEl.textContent = avgResponseTime + ' ms';
+                if (avgResponseTime < 500) {
+                    avgResponseTimeEl.style.color = '#198754'; // green
+                } else if (avgResponseTime < 1000) {
+                    avgResponseTimeEl.style.color = '#ffc107'; // yellow
+                } else {
+                    avgResponseTimeEl.style.color = '#dc3545'; // red
+                }
+                
+                // Update Second Row KPIs
+                // Active Users
+                document.getElementById('activeUsers').textContent = 
+                    data.active_users.toLocaleString();
+                
+                // Files Uploaded
+                document.getElementById('filesUploaded').textContent = 
+                    data.files_uploaded.toLocaleString();
+                
+                // System Health
+                const systemStatus = data.system_status;
+                const esHealthy = systemStatus.elasticsearch === 'healthy';
+                const mongoHealthy = systemStatus.mongodb === 'healthy';
+                const redisHealthy = systemStatus.redis === 'healthy';
+                
+                const esIcon = document.getElementById('esIcon');
+                const mongoIcon = document.getElementById('mongoIcon');
+                const redisIcon = document.getElementById('redisIcon');
+                
+                esIcon.style.color = esHealthy ? '#198754' : '#dc3545';
+                mongoIcon.style.color = mongoHealthy ? '#198754' : '#dc3545';
+                redisIcon.style.color = redisHealthy ? '#198754' : '#dc3545';
+                
+                const allHealthy = esHealthy && mongoHealthy && redisHealthy;
+                const systemHealthBadge = document.getElementById('systemHealthBadge');
+                if (allHealthy) {
+                    systemHealthBadge.className = 'badge bg-success';
+                    systemHealthBadge.textContent = 'All Systems Healthy';
+                } else {
+                    systemHealthBadge.className = 'badge bg-warning';
+                    systemHealthBadge.textContent = 'Some Issues Detected';
+                }
+                
+                // Update Third Row - Slowest Endpoints
+                const slowestEndpoints = data.top_slowest_endpoints || [];
+                if (slowestEndpoints.length > 0) {
+                    document.getElementById('slowestEndpointsLoading').style.display = 'none';
+                    document.getElementById('slowestEndpointsTable').style.display = 'block';
+                    document.getElementById('slowestEndpointsEmpty').style.display = 'none';
+                    
+                    const tbody = document.getElementById('slowestEndpointsBody');
+                    tbody.innerHTML = '';
+                    slowestEndpoints.forEach(item => {
+                        const avgTime = Math.round(item.avg_response_time);
+                        const timeColor = avgTime < 500 ? '#198754' : avgTime < 1000 ? '#ffc107' : '#dc3545';
+                        const row = `
+                            <tr>
+                                <td><code>${item.endpoint}</code></td>
+                                <td><span style="color: ${timeColor}; font-weight: 600;">${avgTime} ms</span></td>
+                                <td>${item.count.toLocaleString()}</td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    document.getElementById('slowestEndpointsLoading').style.display = 'none';
+                    document.getElementById('slowestEndpointsTable').style.display = 'none';
+                    document.getElementById('slowestEndpointsEmpty').style.display = 'block';
+                }
+                
+                // Update Third Row - Latest Error
+                const latestError = data.latest_error;
+                if (latestError) {
+                    document.getElementById('latestErrorLoading').style.display = 'none';
+                    document.getElementById('latestErrorContent').style.display = 'block';
+                    document.getElementById('latestErrorEmpty').style.display = 'none';
+                    
+                    const errorTime = new Date(latestError.timestamp).toLocaleString();
+                    const levelClass = latestError.level === 'CRITICAL' ? 'danger' : 'warning';
+                    
+                    document.getElementById('latestErrorContent').innerHTML = `
+                        <div class="alert alert-${levelClass} mb-0">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <span class="badge bg-${levelClass} mb-2">${latestError.level}</span>
+                                    <h6 class="mb-2">${latestError.message || 'Error occurred'}</h6>
+                                    <p class="mb-1"><small><strong>Endpoint:</strong> <code>${latestError.endpoint || 'N/A'}</code></small></p>
+                                    <p class="mb-1"><small><strong>Status Code:</strong> ${latestError.status_code || 'N/A'}</small></p>
+                                    <p class="mb-0"><small><strong>Time:</strong> ${errorTime}</small></p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('latestErrorLoading').style.display = 'none';
+                    document.getElementById('latestErrorContent').style.display = 'none';
+                    document.getElementById('latestErrorEmpty').style.display = 'block';
+                }
                 
                 // Update indices table
                 const tbody = document.querySelector('#indicesTable tbody');
@@ -386,8 +613,10 @@
                 
             } catch (error) {
                 console.error('Error fetching stats:', error);
-                document.getElementById('totalLogs').innerHTML = 
-                    '<span class="text-danger">Error</span>';
+                // Show error state in KPI cards
+                document.getElementById('totalLogs24h').innerHTML = '<span class="text-danger">Error</span>';
+                document.getElementById('errorRate').innerHTML = '<span class="text-danger">Error</span>';
+                document.getElementById('avgResponseTime').innerHTML = '<span class="text-danger">Error</span>';
             }
         }
         

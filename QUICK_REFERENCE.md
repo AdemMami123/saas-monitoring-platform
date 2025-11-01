@@ -15,7 +15,11 @@ python3 generate_logs.py
 ```
 
 ## Access Interfaces
-- **Dashboard**: http://localhost:5000
+- **Dashboard** (Enhanced!): http://localhost:5000
+  - 9 Real-time KPIs with auto-refresh
+  - Error rate, response time, active users
+  - Slowest endpoints, latest error alerts
+  - System health monitoring
 - **Upload**: http://localhost:5000/upload
 - **Search**: http://localhost:5000/search
 - **Kibana**: http://localhost:5601
@@ -57,14 +61,23 @@ docker logs saas-logstash --tail 50
 # Health check
 GET /api/health
 
+# Stats & KPIs (Enhanced!)
+GET /api/stats
+
 # Upload file
 POST /api/upload
 
 # List uploads
 GET /api/uploads
 
+# Delete upload
+DELETE /api/uploads/<file_id>
+
 # Search logs
-GET /api/logs/search?level=ERROR&page=1
+POST /api/search
+
+# Get endpoints list
+GET /api/search/endpoints
 
 # Export logs
 POST /api/logs/export
@@ -86,6 +99,9 @@ docker-compose up -d
 ```
 
 ## Documentation
+- **Dashboard Enhancement**: `docs/DASHBOARD_ENHANCEMENT.md` ⭐ NEW!
+- **Search Functionality**: `docs/SEARCH_FUNCTIONALITY.md`
+- **Upload Functionality**: `docs/UPLOAD_FUNCTIONALITY.md`
 - **Kibana Setup**: `docs/KIBANA_SETUP.md`
 - **Log Generation**: `docs/GENERATE_LOGS_GUIDE.md`
 - **Full Summary**: `docs/IMPLEMENTATION_SUMMARY.md`
