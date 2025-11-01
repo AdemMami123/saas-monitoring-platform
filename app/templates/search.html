@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Logs - SaaS Log Monitoring</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,.08);
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,.08);
+        }
+        
+        .search-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 0;
+            margin-bottom: 30px;
+        }
+        
+        .search-box {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .log-level-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .log-level-INFO {
+            background-color: #cfe2ff;
+            color: #084298;
+        }
+        
+        .log-level-WARNING {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .log-level-ERROR {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .log-level-DEBUG {
+            background-color: #d1e7dd;
+            color: #0f5132;
+        }
+        
+        .log-level-CRITICAL {
+            background-color: #842029;
+            color: white;
+        }
+        
+        .table-container {
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .table {
+            margin-bottom: 0;
+        }
+        
+        .table thead {
+            background-color: #f8f9fa;
+        }
+        
+        .table tbody tr {
+            transition: background-color 0.2s;
+        }
+        
+        .table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .pagination-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background-color: white;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .results-info {
+            color: #6c757d;
+            font-size: 0.875rem;
+        }
+        
+        .filter-section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        
+        .no-results {
+            display: none;
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .no-results i {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+        
+        .export-btn {
+            position: relative;
+        }
+        
+        .message-cell {
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .timestamp-cell {
+            white-space: nowrap;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-graph-up-arrow me-2"></i>
+                SaaS Log Monitoring
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/upload">
+                            <i class="bi bi-cloud-upload me-1"></i>Upload
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/search">
+                            <i class="bi bi-search me-1"></i>Search Logs
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid mt-4 mb-5">
+        <div class="row">
+            <div class="col-12">
+                <h2 class="mb-4">
+                    <i class="bi bi-search me-2"></i>Search Logs
+                </h2>
+                
+                <!-- Filter Section -->
+                <div class="card filter-section">
+                    <div class="row g-3">
+                        <!-- Search Text -->
+                        <div class="col-md-12">
+                            <label for="searchText" class="form-label">
+                                <i class="bi bi-search me-1"></i>Search
+                            </label>
+                            <input type="text" class="form-control" id="searchText" 
+                                   placeholder="Search in messages, endpoints, user IDs...">
+                        </div>
+                        
+                        <!-- Log Level -->
+                        <div class="col-md-3">
+                            <label for="logLevel" class="form-label">
+                                <i class="bi bi-bar-chart-steps me-1"></i>Log Level
+                            </label>
+                            <select class="form-select" id="logLevel">
+                                <option value="">All Levels</option>
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                                <option value="CRITICAL">CRITICAL</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Endpoint -->
+                        <div class="col-md-3">
+                            <label for="endpoint" class="form-label">
+                                <i class="bi bi-link-45deg me-1"></i>Endpoint
+                            </label>
+                            <input type="text" class="form-control" id="endpoint" 
+                                   placeholder="e.g., /api/users">
+                        </div>
+                        
+                        <!-- Start Date -->
+                        <div class="col-md-3">
+                            <label for="startDate" class="form-label">
+                                <i class="bi bi-calendar-event me-1"></i>Start Date
+                            </label>
+                            <input type="datetime-local" class="form-control" id="startDate">
+                        </div>
+                        
+                        <!-- End Date -->
+                        <div class="col-md-3">
+                            <label for="endDate" class="form-label">
+                                <i class="bi bi-calendar-check me-1"></i>End Date
+                            </label>
+                            <input type="datetime-local" class="form-control" id="endDate">
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div class="col-md-12">
+                            <button class="btn btn-primary" id="searchBtn">
+                                <i class="bi bi-search me-2"></i>Search
+                            </button>
+                            <button class="btn btn-secondary" id="clearBtn">
+                                <i class="bi bi-x-circle me-2"></i>Clear Filters
+                            </button>
+                            <button class="btn btn-success export-btn" id="exportBtn">
+                                <i class="bi bi-file-earmark-spreadsheet me-2"></i>Export to CSV
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Results Card -->
+                <div class="card">
+                    <!-- Loading Spinner -->
+                    <div class="loading-spinner" id="loadingSpinner">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3">Searching logs...</p>
+                    </div>
+                    
+                    <!-- No Results -->
+                    <div class="no-results" id="noResults">
+                        <i class="bi bi-inbox text-muted"></i>
+                        <h4>No Logs Found</h4>
+                        <p>Try adjusting your search filters or criteria.</p>
+                    </div>
+                    
+                    <!-- Results Table -->
+                    <div class="table-container" id="resultsContainer" style="display: none;">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Level</th>
+                                        <th>Endpoint</th>
+                                        <th>User ID</th>
+                                        <th>Message</th>
+                                        <th>Response Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="resultsTableBody">
+                                    <!-- Results will be inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Pagination -->
+                        <div class="pagination-container">
+                            <div class="results-info" id="resultsInfo">
+                                Showing 0 - 0 of 0 results
+                            </div>
+                            <nav>
+                                <ul class="pagination mb-0" id="paginationNav">
+                                    <!-- Pagination will be inserted here -->
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentFilters = {};
+        
+        const searchBtn = document.getElementById('searchBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const noResults = document.getElementById('noResults');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const resultsTableBody = document.getElementById('resultsTableBody');
+        const resultsInfo = document.getElementById('resultsInfo');
+        const paginationNav = document.getElementById('paginationNav');
+        
+        // Initialize - load logs on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            searchLogs(1);
+        });
+        
+        // Search button click
+        searchBtn.addEventListener('click', () => {
+            currentPage = 1;
+            searchLogs(1);
+        });
+        
+        // Clear button click
+        clearBtn.addEventListener('click', () => {
+            document.getElementById('searchText').value = '';
+            document.getElementById('logLevel').value = '';
+            document.getElementById('endpoint').value = '';
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+            currentPage = 1;
+            searchLogs(1);
+        });
+        
+        // Export button click
+        exportBtn.addEventListener('click', () => {
+            exportToCSV();
+        });
+        
+        // Enter key in search text
+        document.getElementById('searchText').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                currentPage = 1;
+                searchLogs(1);
+            }
+        });
+        
+        // Search logs function
+        function searchLogs(page) {
+            // Get filter values
+            const searchText = document.getElementById('searchText').value.trim();
+            const logLevel = document.getElementById('logLevel').value;
+            const endpoint = document.getElementById('endpoint').value.trim();
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            // Build query parameters
+            const params = new URLSearchParams();
+            params.append('page', page);
+            params.append('per_page', 50);
+            
+            if (searchText) params.append('q', searchText);
+            if (logLevel) params.append('level', logLevel);
+            if (endpoint) params.append('endpoint', endpoint);
+            if (startDate) params.append('start_date', startDate);
+            if (endDate) params.append('end_date', endDate);
+            
+            // Store current filters for export
+            currentFilters = {
+                q: searchText,
+                level: logLevel,
+                endpoint: endpoint,
+                start_date: startDate,
+                end_date: endDate
+            };
+            
+            // Show loading
+            loadingSpinner.style.display = 'block';
+            noResults.style.display = 'none';
+            resultsContainer.style.display = 'none';
+            
+            // Fetch results
+            fetch(`/api/logs/search?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    loadingSpinner.style.display = 'none';
+                    
+                    if (data.success && data.logs.length > 0) {
+                        displayResults(data.logs, data.pagination);
+                    } else {
+                        noResults.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    loadingSpinner.style.display = 'none';
+                    console.error('Error searching logs:', error);
+                    alert('Error searching logs. Please try again.');
+                });
+        }
+        
+        // Display results
+        function displayResults(logs, pagination) {
+            // Clear previous results
+            resultsTableBody.innerHTML = '';
+            
+            // Populate table
+            logs.forEach(log => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="timestamp-cell">${formatTimestamp(log['@timestamp'] || log.timestamp)}</td>
+                    <td><span class="log-level-badge log-level-${log.level || 'INFO'}">${log.level || 'INFO'}</span></td>
+                    <td>${escapeHtml(log.endpoint || 'N/A')}</td>
+                    <td>${escapeHtml(log.user_id || 'N/A')}</td>
+                    <td class="message-cell" title="${escapeHtml(log.message || 'N/A')}">${escapeHtml(log.message || 'N/A')}</td>
+                    <td>${log.response_time ? log.response_time + 'ms' : 'N/A'}</td>
+                `;
+                resultsTableBody.appendChild(row);
+            });
+            
+            // Update pagination info
+            const start = (pagination.page - 1) * pagination.per_page + 1;
+            const end = Math.min(pagination.page * pagination.per_page, pagination.total);
+            resultsInfo.textContent = `Showing ${start} - ${end} of ${pagination.total} results`;
+            
+            // Update pagination controls
+            currentPage = pagination.page;
+            totalPages = pagination.total_pages;
+            updatePagination(pagination);
+            
+            // Show results
+            resultsContainer.style.display = 'block';
+        }
+        
+        // Update pagination
+        function updatePagination(pagination) {
+            paginationNav.innerHTML = '';
+            
+            // Previous button
+            const prevLi = document.createElement('li');
+            prevLi.className = `page-item ${!pagination.has_prev ? 'disabled' : ''}`;
+            prevLi.innerHTML = `
+                <a class="page-link" href="#" data-page="${pagination.page - 1}">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+            `;
+            paginationNav.appendChild(prevLi);
+            
+            // Page numbers
+            const maxPages = 5;
+            let startPage = Math.max(1, pagination.page - Math.floor(maxPages / 2));
+            let endPage = Math.min(pagination.total_pages, startPage + maxPages - 1);
+            
+            if (endPage - startPage < maxPages - 1) {
+                startPage = Math.max(1, endPage - maxPages + 1);
+            }
+            
+            // First page
+            if (startPage > 1) {
+                const firstLi = createPageItem(1, pagination.page === 1);
+                paginationNav.appendChild(firstLi);
+                
+                if (startPage > 2) {
+                    const ellipsisLi = document.createElement('li');
+                    ellipsisLi.className = 'page-item disabled';
+                    ellipsisLi.innerHTML = '<a class="page-link">...</a>';
+                    paginationNav.appendChild(ellipsisLi);
+                }
+            }
+            
+            // Page numbers
+            for (let i = startPage; i <= endPage; i++) {
+                const pageLi = createPageItem(i, pagination.page === i);
+                paginationNav.appendChild(pageLi);
+            }
+            
+            // Last page
+            if (endPage < pagination.total_pages) {
+                if (endPage < pagination.total_pages - 1) {
+                    const ellipsisLi = document.createElement('li');
+                    ellipsisLi.className = 'page-item disabled';
+                    ellipsisLi.innerHTML = '<a class="page-link">...</a>';
+                    paginationNav.appendChild(ellipsisLi);
+                }
+                
+                const lastLi = createPageItem(pagination.total_pages, pagination.page === pagination.total_pages);
+                paginationNav.appendChild(lastLi);
+            }
+            
+            // Next button
+            const nextLi = document.createElement('li');
+            nextLi.className = `page-item ${!pagination.has_next ? 'disabled' : ''}`;
+            nextLi.innerHTML = `
+                <a class="page-link" href="#" data-page="${pagination.page + 1}">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            `;
+            paginationNav.appendChild(nextLi);
+            
+            // Add click handlers
+            paginationNav.querySelectorAll('.page-link').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const page = parseInt(e.currentTarget.dataset.page);
+                    if (page && page !== pagination.page) {
+                        searchLogs(page);
+                    }
+                });
+            });
+        }
+        
+        // Create page item
+        function createPageItem(pageNum, isActive) {
+            const li = document.createElement('li');
+            li.className = `page-item ${isActive ? 'active' : ''}`;
+            li.innerHTML = `<a class="page-link" href="#" data-page="${pageNum}">${pageNum}</a>`;
+            return li;
+        }
+        
+        // Export to CSV
+        function exportToCSV() {
+            exportBtn.disabled = true;
+            exportBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Exporting...';
+            
+            fetch('/api/logs/export', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(currentFilters)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Export failed');
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                // Create download link
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `logs_export_${new Date().toISOString().slice(0,10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = '<i class="bi bi-file-earmark-spreadsheet me-2"></i>Export to CSV';
+            })
+            .catch(error => {
+                console.error('Error exporting logs:', error);
+                alert('Error exporting logs. Please try again.');
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = '<i class="bi bi-file-earmark-spreadsheet me-2"></i>Export to CSV';
+            });
+        }
+        
+        // Format timestamp
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp);
+            return date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+        
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Upload - SaaS Log Monitoring</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,.08);
+        }
+        
+        .upload-zone {
+            border: 3px dashed #0d6efd;
+            border-radius: 10px;
+            padding: 60px 20px;
+            text-align: center;
+            background-color: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-zone:hover {
+            background-color: #e7f1ff;
+            border-color: #0a58ca;
+        }
+        
+        .upload-zone.dragover {
+            background-color: #cfe2ff;
+            border-color: #084298;
+            transform: scale(1.02);
+        }
+        
+        .upload-icon {
+            font-size: 4rem;
+            color: #0d6efd;
+            margin-bottom: 1rem;
+        }
+        
+        .file-preview {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .preview-line {
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            padding: 4px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .preview-line:last-child {
+            border-bottom: none;
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,.08);
+        }
+        
+        .alert-custom {
+            border-radius: 8px;
+            border: none;
+        }
+        
+        .progress {
+            height: 25px;
+            border-radius: 8px;
+        }
+        
+        .progress-bar {
+            font-weight: 600;
+        }
+        
+        .file-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .file-info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .file-info-label {
+            font-weight: 600;
+            color: #6c757d;
+        }
+        
+        .file-info-value {
+            color: #212529;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .upload-instructions {
+            color: #6c757d;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-graph-up-arrow me-2"></i>
+                SaaS Log Monitoring
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/upload">
+                            <i class="bi bi-cloud-upload me-1"></i>Upload
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/search">
+                            <i class="bi bi-search me-1"></i>Search Logs
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-4 mb-5">
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <h2 class="mb-4">
+                    <i class="bi bi-cloud-upload me-2"></i>Upload Log Files
+                </h2>
+                
+                <!-- Alert Messages -->
+                <div id="alertContainer"></div>
+                
+                <!-- Upload Card -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <input type="file" id="fileInput" accept=".csv,.json" />
+                        
+                        <div class="upload-zone" id="uploadZone">
+                            <i class="bi bi-cloud-arrow-up upload-icon"></i>
+                            <h4>Drag & Drop Your File Here</h4>
+                            <p class="text-muted mb-3">or click to browse</p>
+                            <button class="btn btn-primary" type="button" onclick="document.getElementById('fileInput').click()">
+                                <i class="bi bi-folder2-open me-2"></i>Choose File
+                            </button>
+                            <div class="upload-instructions">
+                                <small>
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Accepted formats: CSV, JSON | Max size: 100MB
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <!-- File Info (hidden initially) -->
+                        <div id="fileInfo" class="file-info mt-4" style="display: none;">
+                            <div class="file-info-item">
+                                <span class="file-info-label">
+                                    <i class="bi bi-file-earmark me-1"></i>File Name:
+                                </span>
+                                <span class="file-info-value" id="fileName"></span>
+                            </div>
+                            <div class="file-info-item">
+                                <span class="file-info-label">
+                                    <i class="bi bi-hdd me-1"></i>File Size:
+                                </span>
+                                <span class="file-info-value" id="fileSize"></span>
+                            </div>
+                            <div class="file-info-item">
+                                <span class="file-info-label">
+                                    <i class="bi bi-filetype-json me-1"></i>File Type:
+                                </span>
+                                <span class="file-info-value" id="fileType"></span>
+                            </div>
+                        </div>
+                        
+                        <!-- Progress Bar (hidden initially) -->
+                        <div id="progressContainer" class="mt-4" style="display: none;">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     id="progressBar" 
+                                     role="progressbar" 
+                                     style="width: 0%">
+                                    0%
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Upload Button -->
+                        <div class="text-center mt-4">
+                            <button class="btn btn-success btn-lg" id="uploadBtn" style="display: none;">
+                                <i class="bi bi-upload me-2"></i>Upload File
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- File Preview Card (hidden initially) -->
+                <div class="card" id="previewCard" style="display: none;">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="bi bi-eye me-2"></i>File Preview (First 10 Lines)
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="file-preview" id="filePreview">
+                            <!-- Preview content will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        let selectedFile = null;
+        
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const alertContainer = document.getElementById('alertContainer');
+        const previewCard = document.getElementById('previewCard');
+        const filePreview = document.getElementById('filePreview');
+        
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        // Highlight drop zone when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, () => {
+                uploadZone.classList.add('dragover');
+            }, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, () => {
+                uploadZone.classList.remove('dragover');
+            }, false);
+        });
+        
+        // Handle dropped files
+        uploadZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }, false);
+        
+        // Handle file input change
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        // Handle click on upload zone
+        uploadZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        // Handle file selection
+        function handleFile(file) {
+            // Validate file type
+            const allowedTypes = ['text/csv', 'application/json', 'text/plain'];
+            const fileName = file.name.toLowerCase();
+            
+            if (!fileName.endsWith('.csv') && !fileName.endsWith('.json')) {
+                showAlert('danger', 'Invalid file type. Please upload a CSV or JSON file.');
+                return;
+            }
+            
+            // Validate file size (100MB)
+            const maxSize = 100 * 1024 * 1024;
+            if (file.size > maxSize) {
+                showAlert('danger', 'File size exceeds 100MB limit.');
+                return;
+            }
+            
+            selectedFile = file;
+            
+            // Display file info
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            document.getElementById('fileType').textContent = file.name.split('.').pop().toUpperCase();
+            
+            fileInfo.style.display = 'block';
+            uploadBtn.style.display = 'inline-block';
+            
+            // Show file preview
+            showFilePreview(file);
+            
+            showAlert('info', 'File selected successfully. Click "Upload File" to proceed.');
+        }
+        
+        // Show file preview
+        function showFilePreview(file) {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                const content = e.target.result;
+                const lines = content.split('\n').slice(0, 10);
+                
+                filePreview.innerHTML = '';
+                lines.forEach((line, index) => {
+                    if (line.trim()) {
+                        const lineDiv = document.createElement('div');
+                        lineDiv.className = 'preview-line';
+                        lineDiv.textContent = `${index + 1}: ${line}`;
+                        filePreview.appendChild(lineDiv);
+                    }
+                });
+                
+                previewCard.style.display = 'block';
+            };
+            
+            reader.readAsText(file.slice(0, 10000)); // Read first 10KB for preview
+        }
+        
+        // Upload button click handler
+        uploadBtn.addEventListener('click', () => {
+            if (!selectedFile) {
+                showAlert('warning', 'Please select a file first.');
+                return;
+            }
+            
+            uploadFile(selectedFile);
+        });
+        
+        // Upload file to server
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            progressContainer.style.display = 'block';
+            uploadBtn.disabled = true;
+            
+            const xhr = new XMLHttpRequest();
+            
+            // Upload progress
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    progressBar.style.width = percentComplete + '%';
+                    progressBar.textContent = percentComplete + '%';
+                }
+            });
+            
+            // Upload complete
+            xhr.addEventListener('load', () => {
+                if (xhr.status === 201) {
+                    const response = JSON.parse(xhr.responseText);
+                    showAlert('success', `File uploaded successfully! File ID: ${response.file_id}`);
+                    
+                    // Update preview with server response
+                    if (response.preview && response.preview.length > 0) {
+                        filePreview.innerHTML = '';
+                        response.preview.forEach((line, index) => {
+                            const lineDiv = document.createElement('div');
+                            lineDiv.className = 'preview-line';
+                            lineDiv.textContent = `${index + 1}: ${line}`;
+                            filePreview.appendChild(lineDiv);
+                        });
+                    }
+                    
+                    // Reset form after 3 seconds
+                    setTimeout(() => {
+                        resetForm();
+                    }, 3000);
+                } else {
+                    const error = JSON.parse(xhr.responseText);
+                    showAlert('danger', `Upload failed: ${error.error || 'Unknown error'}`);
+                    uploadBtn.disabled = false;
+                }
+                
+                progressContainer.style.display = 'none';
+                progressBar.style.width = '0%';
+                progressBar.textContent = '0%';
+            });
+            
+            // Upload error
+            xhr.addEventListener('error', () => {
+                showAlert('danger', 'Upload failed. Please try again.');
+                uploadBtn.disabled = false;
+                progressContainer.style.display = 'none';
+            });
+            
+            xhr.open('POST', '/api/upload');
+            xhr.send(formData);
+        }
+        
+        // Show alert message
+        function showAlert(type, message) {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show alert-custom`;
+            alert.innerHTML = `
+                <i class="bi bi-${getAlertIcon(type)} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            alertContainer.innerHTML = '';
+            alertContainer.appendChild(alert);
+            
+            // Auto dismiss after 5 seconds
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+        
+        // Get icon for alert type
+        function getAlertIcon(type) {
+            const icons = {
+                'success': 'check-circle-fill',
+                'danger': 'exclamation-triangle-fill',
+                'warning': 'exclamation-circle-fill',
+                'info': 'info-circle-fill'
+            };
+            return icons[type] || 'info-circle-fill';
+        }
+        
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+        
+        // Reset form
+        function resetForm() {
+            selectedFile = null;
+            fileInput.value = '';
+            fileInfo.style.display = 'none';
+            uploadBtn.style.display = 'none';
+            uploadBtn.disabled = false;
+            previewCard.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
