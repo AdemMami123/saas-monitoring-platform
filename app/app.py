@@ -3,8 +3,9 @@ import csv
 import json
 import subprocess
 import time
+import re
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request, send_file, session
 from flask_cors import CORS
 from elasticsearch import Elasticsearch
 from pymongo import MongoClient
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 import uuid
 import io
+from models.user import User
 
 # Load environment variables
 load_dotenv()
@@ -20,6 +22,9 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
+
+# Secret key for session management
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Configuration from environment variables
 ES_HOST = os.getenv('ELASTICSEARCH_HOST', 'http://localhost:9200')
@@ -117,6 +122,171 @@ def upload_page():
 def search_page():
     """Render log search page"""
     return render_template('search.html')
+
+@app.route('/register')
+def register_page():
+    """Render user registration page"""
+    return render_template('register.html')
+
+@app.route('/api/register', methods=['POST'])
+def register_user():
+    """
+    Register a new user
+    
+    Request JSON:
+        {
+            "username": "string (3-20 chars)",
+            "email": "string (valid email)",
+            "password": "string (8+ chars)",
+            "confirm_password": "string"
+        }
+    
+    Response JSON:
+        Success: {"success": true, "redirect": "/dashboard", "message": "..."}
+        Error: {"success": false, "error": "...", "field": "..."}
+    """
+    try:
+        # Get JSON data
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        username = data.get('username', '').strip()
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
+        confirm_password = data.get('confirm_password', '')
+        
+        # Validation
+        errors = []
+        
+        # Username validation
+        if not username:
+            errors.append({
+                'field': 'username',
+                'error': 'Username is required'
+            })
+        elif len(username) < 3:
+            errors.append({
+                'field': 'username',
+                'error': 'Username must be at least 3 characters'
+            })
+        elif len(username) > 20:
+            errors.append({
+                'field': 'username',
+                'error': 'Username must not exceed 20 characters'
+            })
+        elif not re.match(r'^[a-zA-Z0-9_]+$', username):
+            errors.append({
+                'field': 'username',
+                'error': 'Username can only contain letters, numbers, and underscores'
+            })
+        
+        # Email validation
+        if not email:
+            errors.append({
+                'field': 'email',
+                'error': 'Email is required'
+            })
+        elif not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+            errors.append({
+                'field': 'email',
+                'error': 'Invalid email format'
+            })
+        
+        # Password validation
+        if not password:
+            errors.append({
+                'field': 'password',
+                'error': 'Password is required'
+            })
+        elif len(password) < 8:
+            errors.append({
+                'field': 'password',
+                'error': 'Password must be at least 8 characters'
+            })
+        
+        # Confirm password validation
+        if password != confirm_password:
+            errors.append({
+                'field': 'confirm_password',
+                'error': 'Passwords do not match'
+            })
+        
+        # Return validation errors if any
+        if errors:
+            return jsonify({
+                'success': False,
+                'errors': errors,
+                'error': errors[0]['error']  # First error for general display
+            }), 400
+        
+        # Create user
+        try:
+            user_id = User.create(username, email, password)
+            
+            # Create session in Redis
+            session_id = str(uuid.uuid4())
+            session_data = {
+                'user_id': user_id,
+                'username': username,
+                'email': email,
+                'login_time': datetime.utcnow().isoformat()
+            }
+            
+            # Store session in Redis (expires in 7 days)
+            if redis_client:
+                try:
+                    redis_client.setex(
+                        f'session:{session_id}',
+                        7 * 24 * 60 * 60,  # 7 days in seconds
+                        json.dumps(session_data)
+                    )
+                except Exception as e:
+                    print(f"Redis session creation error: {e}")
+            
+            # Set Flask session
+            session['user_id'] = user_id
+            session['username'] = username
+            session['session_id'] = session_id
+            
+            return jsonify({
+                'success': True,
+                'redirect': '/',
+                'message': f'Welcome, {username}! Your account has been created successfully.',
+                'user': {
+                    'id': user_id,
+                    'username': username,
+                    'email': email
+                }
+            }), 201
+            
+        except ValueError as e:
+            # Handle duplicate username/email
+            error_msg = str(e)
+            field = 'username' if 'username' in error_msg.lower() else 'email'
+            return jsonify({
+                'success': False,
+                'error': error_msg,
+                'field': field
+            }), 400
+        
+        except Exception as e:
+            print(f"User creation error: {e}")
+            return jsonify({
+                'success': False,
+                'error': 'Failed to create user. Please try again later.'
+            }), 500
+    
+    except Exception as e:
+        print(f"Registration error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'An unexpected error occurred. Please try again.'
+        }), 500
 
 @app.route('/api/health')
 def health_check():
