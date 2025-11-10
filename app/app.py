@@ -200,6 +200,11 @@ def get_stats():
             'overall': 'degraded'
         },
         'indices': [],
+        'hourly_trends': {
+            'logs': [],
+            'errors': [],
+            'response_times': []
+        },
         'error': None
     }
     
@@ -358,6 +363,54 @@ def get_stats():
                 stats['files_uploaded'] = files_collection.count_documents({})
             except Exception as e:
                 print(f"MongoDB files count error: {e}")
+        
+        # Get hourly trends for last 24 hours (for sparkline charts)
+        hourly_trends_query = {
+            "query": {
+                "range": {
+                    "timestamp": {
+                        "gte": last_24h_str
+                    }
+                }
+            },
+            "aggs": {
+                "hourly": {
+                    "date_histogram": {
+                        "field": "timestamp",
+                        "fixed_interval": "1h",
+                        "min_doc_count": 0,
+                        "extended_bounds": {
+                            "min": last_24h_str,
+                            "max": now.isoformat()
+                        }
+                    },
+                    "aggs": {
+                        "error_count": {
+                            "filter": {
+                                "range": {
+                                    "status_code": {
+                                        "gte": 500,
+                                        "lt": 600
+                                    }
+                                }
+                            }
+                        },
+                        "avg_response": {
+                            "avg": {
+                                "field": "response_time_ms"
+                            }
+                        }
+                    }
+                }
+            },
+            "size": 0
+        }
+        trends_result = es_client.search(index="saas-logs-*", body=hourly_trends_query)
+        for bucket in trends_result.get('aggregations', {}).get('hourly', {}).get('buckets', []):
+            stats['hourly_trends']['logs'].append(bucket.get('doc_count', 0))
+            stats['hourly_trends']['errors'].append(bucket.get('error_count', {}).get('doc_count', 0))
+            avg_resp = bucket.get('avg_response', {}).get('value')
+            stats['hourly_trends']['response_times'].append(round(avg_resp, 0) if avg_resp else 0)
         
         # 9. System status
         stats['system_status']['elasticsearch'] = 'healthy'

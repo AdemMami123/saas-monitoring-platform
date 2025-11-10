@@ -11,6 +11,9 @@
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
     <style>
         body {
             background-color: #f8f9fa;
@@ -155,7 +158,7 @@
                 <div class="card kpi-card h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start">
-                            <div>
+                            <div class="flex-grow-1">
                                 <div class="kpi-label">TOTAL LOGS (24H)</div>
                                 <div class="kpi-value" id="totalLogs24h">
                                     <span class="loading"></span>
@@ -166,6 +169,9 @@
                                 <i class="bi bi-file-text"></i>
                             </div>
                         </div>
+                        <div class="mt-3">
+                            <canvas id="logsSparkline" height="40"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -175,7 +181,7 @@
                 <div class="card h-100" style="border-left: 4px solid #dc3545;">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start">
-                            <div>
+                            <div class="flex-grow-1">
                                 <div class="kpi-label">ERROR RATE</div>
                                 <div class="kpi-value" id="errorRate">
                                     <span class="loading"></span>
@@ -186,6 +192,9 @@
                                 <i class="bi bi-exclamation-triangle"></i>
                             </div>
                         </div>
+                        <div class="mt-3">
+                            <canvas id="errorsSparkline" height="40"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -195,7 +204,7 @@
                 <div class="card h-100" style="border-left: 4px solid #0dcaf0;">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start">
-                            <div>
+                            <div class="flex-grow-1">
                                 <div class="kpi-label">AVG RESPONSE TIME</div>
                                 <div class="kpi-value" id="avgResponseTime">
                                     <span class="loading"></span>
@@ -205,6 +214,9 @@
                             <div style="font-size: 2.5rem;" id="responseTimeIcon">
                                 <i class="bi bi-speedometer2"></i>
                             </div>
+                        </div>
+                        <div class="mt-3">
+                            <canvas id="responseTimeSparkline" height="40"></canvas>
                         </div>
                     </div>
                 </div>
@@ -409,6 +421,120 @@
         // Auto-refresh interval (30 seconds)
         const REFRESH_INTERVAL = 30000;
         
+        // Chart.js instances
+        let logsChart = null;
+        let errorsChart = null;
+        let responseTimeChart = null;
+        
+        // Initialize sparkline charts
+        function initializeSparklineCharts() {
+            const sparklineConfig = {
+                type: 'line',
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            enabled: true,
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: false
+                        },
+                        y: {
+                            display: false,
+                            beginAtZero: true
+                        }
+                    },
+                    elements: {
+                        point: {
+                            radius: 0,
+                            hitRadius: 10,
+                            hoverRadius: 4
+                        },
+                        line: {
+                            borderWidth: 2,
+                            tension: 0.4
+                        }
+                    }
+                }
+            };
+            
+            // Logs sparkline
+            const logsCtx = document.getElementById('logsSparkline').getContext('2d');
+            logsChart = new Chart(logsCtx, {
+                ...sparklineConfig,
+                data: {
+                    labels: Array(24).fill(''),
+                    datasets: [{
+                        data: Array(24).fill(0),
+                        borderColor: '#0d6efd',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        fill: true
+                    }]
+                }
+            });
+            
+            // Errors sparkline
+            const errorsCtx = document.getElementById('errorsSparkline').getContext('2d');
+            errorsChart = new Chart(errorsCtx, {
+                ...sparklineConfig,
+                data: {
+                    labels: Array(24).fill(''),
+                    datasets: [{
+                        data: Array(24).fill(0),
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                        fill: true
+                    }]
+                }
+            });
+            
+            // Response time sparkline
+            const responseTimeCtx = document.getElementById('responseTimeSparkline').getContext('2d');
+            responseTimeChart = new Chart(responseTimeCtx, {
+                ...sparklineConfig,
+                data: {
+                    labels: Array(24).fill(''),
+                    datasets: [{
+                        data: Array(24).fill(0),
+                        borderColor: '#0dcaf0',
+                        backgroundColor: 'rgba(13, 202, 240, 0.1)',
+                        fill: true
+                    }]
+                }
+            });
+        }
+        
+        // Update sparkline charts with new data
+        function updateSparklineCharts(trends) {
+            if (trends && trends.logs && trends.logs.length > 0) {
+                // Update logs chart
+                if (logsChart) {
+                    logsChart.data.datasets[0].data = trends.logs;
+                    logsChart.update('none');
+                }
+                
+                // Update errors chart
+                if (errorsChart) {
+                    errorsChart.data.datasets[0].data = trends.errors;
+                    errorsChart.update('none');
+                }
+                
+                // Update response time chart
+                if (responseTimeChart) {
+                    responseTimeChart.data.datasets[0].data = trends.response_times;
+                    responseTimeChart.update('none');
+                }
+            }
+        }
+        
         // Fetch and update health status
         async function updateHealth() {
             try {
@@ -468,48 +594,67 @@
         async function updateStats() {
             try {
                 const response = await fetch('/api/stats');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
+                
+                // Check for errors in the response
+                if (data.error) {
+                    console.error('API Error:', data.error);
+                    showErrorState();
+                    return;
+                }
                 
                 // Update Top Row KPIs
                 // Total Logs 24h
+                const totalLogs24h = data.total_logs_24h || 0;
                 document.getElementById('totalLogs24h').textContent = 
-                    data.total_logs_24h.toLocaleString();
+                    totalLogs24h.toLocaleString();
                 
                 // Error Rate with color coding
-                const errorRate = parseFloat(data.error_rate.toFixed(2));
+                const errorRate = parseFloat((data.error_rate || 0).toFixed(2));
                 const errorRateEl = document.getElementById('errorRate');
+                const errorRateIcon = document.getElementById('errorRateIcon');
                 errorRateEl.textContent = errorRate + '%';
                 if (errorRate < 1) {
                     errorRateEl.style.color = '#198754'; // green
+                    errorRateIcon.style.color = '#198754';
                 } else if (errorRate < 5) {
                     errorRateEl.style.color = '#ffc107'; // yellow
+                    errorRateIcon.style.color = '#ffc107';
                 } else {
                     errorRateEl.style.color = '#dc3545'; // red
+                    errorRateIcon.style.color = '#dc3545';
                 }
                 
                 // Average Response Time with color coding
-                const avgResponseTime = Math.round(data.avg_response_time);
+                const avgResponseTime = Math.round(data.avg_response_time || 0);
                 const avgResponseTimeEl = document.getElementById('avgResponseTime');
+                const responseTimeIcon = document.getElementById('responseTimeIcon');
                 avgResponseTimeEl.textContent = avgResponseTime + ' ms';
                 if (avgResponseTime < 500) {
                     avgResponseTimeEl.style.color = '#198754'; // green
+                    responseTimeIcon.style.color = '#198754';
                 } else if (avgResponseTime < 1000) {
                     avgResponseTimeEl.style.color = '#ffc107'; // yellow
+                    responseTimeIcon.style.color = '#ffc107';
                 } else {
                     avgResponseTimeEl.style.color = '#dc3545'; // red
+                    responseTimeIcon.style.color = '#dc3545';
                 }
                 
                 // Update Second Row KPIs
                 // Active Users
                 document.getElementById('activeUsers').textContent = 
-                    data.active_users.toLocaleString();
+                    (data.active_users || 0).toLocaleString();
                 
                 // Files Uploaded
                 document.getElementById('filesUploaded').textContent = 
-                    data.files_uploaded.toLocaleString();
+                    (data.files_uploaded || 0).toLocaleString();
                 
                 // System Health
-                const systemStatus = data.system_status;
+                const systemStatus = data.system_status || {};
                 const esHealthy = systemStatus.elasticsearch === 'healthy';
                 const mongoHealthy = systemStatus.mongodb === 'healthy';
                 const redisHealthy = systemStatus.redis === 'healthy';
@@ -611,13 +756,25 @@
                 document.getElementById('lastUpdated').textContent = 
                     now.toLocaleTimeString();
                 
+                // Update sparkline charts
+                if (data.hourly_trends) {
+                    updateSparklineCharts(data.hourly_trends);
+                }
+                
             } catch (error) {
                 console.error('Error fetching stats:', error);
-                // Show error state in KPI cards
-                document.getElementById('totalLogs24h').innerHTML = '<span class="text-danger">Error</span>';
-                document.getElementById('errorRate').innerHTML = '<span class="text-danger">Error</span>';
-                document.getElementById('avgResponseTime').innerHTML = '<span class="text-danger">Error</span>';
+                showErrorState();
             }
+        }
+        
+        // Show error state in KPI cards
+        function showErrorState() {
+            const errorHtml = '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> Error</span>';
+            document.getElementById('totalLogs24h').innerHTML = errorHtml;
+            document.getElementById('errorRate').innerHTML = errorHtml;
+            document.getElementById('avgResponseTime').innerHTML = errorHtml;
+            document.getElementById('activeUsers').innerHTML = errorHtml;
+            document.getElementById('filesUploaded').innerHTML = errorHtml;
         }
         
         function updateServiceIndicator(statusId, hostId, serviceInfo, extraField = 'host') {
@@ -645,14 +802,17 @@
         }
         
         // Initial load
-        updateHealth();
-        updateStats();
-        
-        // Auto-refresh every 30 seconds
-        setInterval(() => {
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSparklineCharts();
             updateHealth();
             updateStats();
-        }, REFRESH_INTERVAL);
+            
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                updateHealth();
+                updateStats();
+            }, REFRESH_INTERVAL);
+        });
     </script>
 </body>
 </html>
