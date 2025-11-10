@@ -5,7 +5,8 @@ import subprocess
 import time
 import re
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, send_file, session
+from functools import wraps
+from flask import Flask, render_template, jsonify, request, send_file, session, redirect, url_for
 from flask_cors import CORS
 from elasticsearch import Elasticsearch
 from pymongo import MongoClient
@@ -104,21 +105,34 @@ init_elasticsearch()
 init_mongodb()
 init_redis()
 
+# Authentication decorator
+def login_required(f):
+    """Decorator to require login for protected routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/')
+@login_required
 def dashboard():
     """Render main dashboard"""
     return render_template('index.html')
 
 @app.route('/upload')
+@login_required
 def upload_page():
     """Render file upload page"""
     return render_template('upload.html')
 
 @app.route('/search')
+@login_required
 def search_page():
     """Render log search page"""
     return render_template('search.html')
@@ -127,6 +141,14 @@ def search_page():
 def register_page():
     """Render user registration page"""
     return render_template('register.html')
+
+@app.route('/login')
+def login_page():
+    """Render user login page"""
+    # If already logged in, redirect to dashboard
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+    return render_template('login.html')
 
 @app.route('/api/register', methods=['POST'])
 def register_user():
@@ -286,6 +308,138 @@ def register_user():
         return jsonify({
             'success': False,
             'error': 'An unexpected error occurred. Please try again.'
+        }), 500
+
+@app.route('/api/login', methods=['POST'])
+def login_user():
+    """
+    Login user with username/email and password
+    
+    Request JSON:
+        {
+            "username": "string (username or email)",
+            "password": "string"
+        }
+    
+    Response JSON:
+        Success: {"success": true, "redirect": "/", "message": "...", "user": {...}}
+        Error: {"success": false, "error": "..."}
+    """
+    try:
+        # Get JSON data
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        
+        # Validation
+        if not username:
+            return jsonify({
+                'success': False,
+                'error': 'Username or email is required',
+                'field': 'username'
+            }), 400
+        
+        if not password:
+            return jsonify({
+                'success': False,
+                'error': 'Password is required',
+                'field': 'password'
+            }), 400
+        
+        # Authenticate user
+        user = User.authenticate(username, password)
+        
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid username or password'
+            }), 401
+        
+        # Create session in Redis
+        session_id = str(uuid.uuid4())
+        session_data = {
+            'user_id': user['_id'],
+            'username': user['username'],
+            'email': user['email'],
+            'login_time': datetime.utcnow().isoformat()
+        }
+        
+        # Store session in Redis (expires in 7 days)
+        if redis_client:
+            try:
+                redis_client.setex(
+                    f'session:{session_id}',
+                    7 * 24 * 60 * 60,  # 7 days in seconds
+                    json.dumps(session_data)
+                )
+            except Exception as e:
+                print(f"Redis session creation error: {e}")
+        
+        # Set Flask session
+        session['user_id'] = user['_id']
+        session['username'] = user['username']
+        session['email'] = user['email']
+        session['session_id'] = session_id
+        
+        return jsonify({
+            'success': True,
+            'redirect': '/',
+            'message': f'Welcome back, {user["username"]}!',
+            'user': {
+                'id': user['_id'],
+                'username': user['username'],
+                'email': user['email']
+            }
+        }), 200
+    
+    except Exception as e:
+        print(f"Login error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'An unexpected error occurred. Please try again.'
+        }), 500
+
+@app.route('/api/logout', methods=['POST'])
+def logout_user():
+    """
+    Logout user and clear session
+    
+    Response JSON:
+        {"success": true, "redirect": "/login", "message": "..."}
+    """
+    try:
+        # Get session ID from Flask session
+        session_id = session.get('session_id')
+        username = session.get('username', 'User')
+        
+        # Delete session from Redis
+        if session_id and redis_client:
+            try:
+                redis_client.delete(f'session:{session_id}')
+            except Exception as e:
+                print(f"Redis session deletion error: {e}")
+        
+        # Clear Flask session
+        session.clear()
+        
+        return jsonify({
+            'success': True,
+            'redirect': '/login',
+            'message': f'Goodbye, {username}! You have been logged out successfully.'
+        }), 200
+    
+    except Exception as e:
+        print(f"Logout error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'An error occurred during logout.'
         }), 500
 
 @app.route('/api/health')
