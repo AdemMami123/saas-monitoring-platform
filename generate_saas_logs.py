@@ -196,10 +196,11 @@ def main():
     csv_size = os.path.getsize(csv_filename) / (1024 * 1024)  # MB
     print(f"✓ Saved: {csv_filename} ({csv_size:.1f} MB)")
     
-    # Save as JSON
+    # Save as JSON (JSONL format - one object per line)
     json_filename = 'saas_logs.json'
     with open(json_filename, 'w', encoding='utf-8') as jsonfile:
-        json.dump(logs, jsonfile, indent=2)
+        for log in logs:
+            jsonfile.write(json.dumps(log) + '\n')
     
     # Get JSON file size
     json_size = os.path.getsize(json_filename) / (1024 * 1024)  # MB

@@ -4,6 +4,7 @@ import json
 import subprocess
 import time
 import re
+import shutil
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, render_template, jsonify, request, send_file, session, redirect, url_for
@@ -1061,6 +1062,16 @@ def upload_file():
         # Save file to uploads folder
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], saved_filename)
         file.save(file_path)
+        
+        # Also copy to root uploads folder for Logstash processing
+        try:
+            logstash_uploads_dir = '/uploads'  # Maps to ./uploads in host
+            os.makedirs(logstash_uploads_dir, exist_ok=True)
+            logstash_file_path = os.path.join(logstash_uploads_dir, saved_filename)
+            shutil.copy(file_path, logstash_file_path)
+            print(f"Copied to Logstash folder: {logstash_file_path}")
+        except Exception as e:
+            print(f"Warning: Could not copy to Logstash folder: {e}")
         
         # Get file size
         file_size = os.path.getsize(file_path)
