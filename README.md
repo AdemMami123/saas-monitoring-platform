@@ -63,12 +63,23 @@ The **SaaS Monitoring Platform** is a comprehensive log management solution desi
 - Metadata tracking (filename, size, timestamp)
 - File deletion capability
 
-### 3. **Real-Time Log Processing**
-- Logstash pipeline for ETL operations
-- CSV and JSON codec support
-- Automatic field parsing and type conversion
-- GeoIP enrichment for client IPs
-- Batch processing for high-volume data
+### 3. **Real-Time Log Processing** ⚡ NEW
+- **WebSocket-based Live Dashboard** with sub-second latency
+- **Live Log Tail** (terminal-style tail -f viewer)
+- **Multiple Streaming Sources:**
+  - TCP Socket (port 5045)
+  - UDP Socket (port 5001)
+  - HTTP Webhooks (port 8080)
+  - Redis Pub/Sub
+  - Filebeat integration (port 5044)
+- **Real-Time Metrics:**
+  - Logs per second
+  - Errors per minute
+  - Connected users
+  - Total logs processed
+- **Streaming Charts** with automatic updates
+- **Visual Alerts:** Desktop notifications, tab badges, audio alerts
+- Circular buffer (1000 log limit) for memory efficiency
 
 ### 4. **Advanced Search & Filtering**
 - Full-text search across log messages
@@ -79,6 +90,7 @@ The **SaaS Monitoring Platform** is a comprehensive log management solution desi
 - Server and tenant filtering
 - Pagination support (50 results per page)
 - Export results to CSV
+- **Real-time filtering** in Live Logs view
 
 ### 5. **Interactive Dashboard**
 - **9 Key Performance Indicators (KPIs):**
@@ -99,20 +111,24 @@ The **SaaS Monitoring Platform** is a comprehensive log management solution desi
 
 ### 6. **Data Visualization**
 - Kibana integration for advanced analytics
+- **Live Dashboard** with real-time streaming charts ⚡ NEW
 - Pre-configured visualizations:
   - Response time trends (line chart)
   - Status code distribution (pie chart)
   - Top endpoints (bar chart)
   - Error rate timeline
   - Database query performance
+  - **Real-time log stream rate** (60-second rolling window)
+  - **Live log level distribution**
 - Custom dashboard support
 
-### 7. **Log Generation**
+### 7. **Log Generation & Testing**
 - Faker-based realistic log generation
 - 10,000+ sample logs per generation
 - Multiple log types (web_request, database_query)
 - Configurable time ranges
 - Statistical distributions for realistic data
+- **Test log sender script** for real-time testing ⚡ NEW
 
 ---
 
@@ -534,6 +550,101 @@ docker-compose down
 # Stop and remove everything (DELETE DATA!)
 docker-compose down -v
 ```
+
+---
+
+## ⚡ Real-Time Monitoring (NEW)
+
+### Live Dashboard
+
+Access the real-time dashboard at **http://localhost:5000/live-dashboard**
+
+**Features:**
+- WebSocket connection with automatic reconnection
+- Real-time metrics (logs/sec, errors/min, connected users)
+- Streaming charts with 60-second rolling window
+- Desktop notifications for ERROR/CRITICAL logs
+- Audio alerts (toggle-able)
+- Connection status indicator
+
+**Charts:**
+- Log Stream Rate (real-time line chart)
+- Log Level Distribution (doughnut chart)
+- Response Time Distribution (bar chart)
+- Status Code Distribution (horizontal bar chart)
+
+### Live Log Tail
+
+Access the live log viewer at **http://localhost:5000/live-logs**
+
+**Terminal-Style Features:**
+- Real-time log streaming (tail -f mode)
+- Syntax highlighting by log level
+- Auto-scroll with manual override
+- Pause/Resume controls
+- Filter by level, service, or text search
+- Circular buffer (max 1000 logs)
+- Statistics bar (count, rate, errors)
+
+**Keyboard Shortcuts:**
+- `Space` - Pause/Resume
+- `Ctrl+C` - Clear logs
+- `Ctrl+S` - Toggle auto-scroll
+- `Ctrl+F` - Focus search
+
+### Streaming Input Ports
+
+Send logs to these endpoints for real-time processing:
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 5045 | TCP | High-throughput streaming |
+| 5001 | UDP | Low-latency streaming |
+| 8080 | HTTP | Webhook integrations |
+| 5044 | Beats | Filebeat integration |
+
+### Send Test Logs
+
+Use the included test script:
+
+```bash
+# Send a single log
+python send_test_logs.py single --method http
+
+# Send a burst of 50 logs
+python send_test_logs.py burst --count 50
+
+# Continuously send logs at 5/second
+python send_test_logs.py continuous --rate 5
+
+# Send via TCP
+python send_test_logs.py continuous --method tcp --rate 10
+```
+
+Or send directly via cURL:
+
+```bash
+# HTTP Webhook
+curl -X POST http://localhost:8080 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "level": "ERROR",
+    "message": "Test error message",
+    "log_type": "API",
+    "endpoint": "/api/test",
+    "status_code": 500
+  }'
+
+# TCP Socket
+echo '{"level":"INFO","message":"Test log"}' | nc localhost 5045
+```
+
+### Documentation
+
+For detailed real-time features documentation:
+- **Quick Start:** `/docs/REALTIME_QUICK_START.md`
+- **Full Documentation:** `/docs/REALTIME_MODULE.md`
+- **Implementation Details:** `/docs/IMPLEMENTATION_REALTIME.md`
 
 ---
 

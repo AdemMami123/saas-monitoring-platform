@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, render_template, jsonify, request, send_file, session, redirect, url_for
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit, join_room, leave_room, disconnect
 from elasticsearch import Elasticsearch
 from pymongo import MongoClient
 import redis
@@ -17,6 +18,8 @@ from werkzeug.utils import secure_filename
 import uuid
 import io
 from models.user import User
+import threading
+import random
 
 # Load environment variables
 load_dotenv()
@@ -24,6 +27,9 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
+
+# Initialize SocketIO with eventlet for WebSocket support
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet', logger=True, engineio_logger=False)
 
 # Secret key for session management
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -1359,5 +1365,345 @@ def export_logs():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ============================================================================
+# WebSocket Events and Real-Time Features
+# ============================================================================
+
+# Track connected clients and their subscriptions
+connected_clients = {}
+realtime_metrics = {
+    'logs_per_second': 0,
+    'errors_per_minute': 0,
+    'active_requests': 0,
+    'connected_users': 0,
+    'total_logs_processed': 0
+}
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    client_id = request.sid
+    connected_clients[client_id] = {
+        'connected_at': datetime.utcnow(),
+        'subscriptions': [],
+        'filters': {}
+    }
+    realtime_metrics['connected_users'] = len(connected_clients)
+    
+    print(f"Client connected: {client_id}")
+    emit('connection_status', {
+        'status': 'connected',
+        'client_id': client_id,
+        'timestamp': datetime.utcnow().isoformat()
+    })
+    
+    # Send current metrics on connect
+    emit('metrics_update', realtime_metrics)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    client_id = request.sid
+    if client_id in connected_clients:
+        del connected_clients[client_id]
+    realtime_metrics['connected_users'] = len(connected_clients)
+    print(f"Client disconnected: {client_id}")
+
+@socketio.on('subscribe')
+def handle_subscribe(data):
+    """Subscribe to real-time log stream"""
+    client_id = request.sid
+    channel = data.get('channel', 'all')
+    
+    if client_id in connected_clients:
+        if channel not in connected_clients[client_id]['subscriptions']:
+            connected_clients[client_id]['subscriptions'].append(channel)
+        
+        join_room(channel)
+        emit('subscription_confirmed', {
+            'channel': channel,
+            'status': 'subscribed'
+        })
+        print(f"Client {client_id} subscribed to {channel}")
+
+@socketio.on('unsubscribe')
+def handle_unsubscribe(data):
+    """Unsubscribe from real-time log stream"""
+    client_id = request.sid
+    channel = data.get('channel', 'all')
+    
+    if client_id in connected_clients:
+        if channel in connected_clients[client_id]['subscriptions']:
+            connected_clients[client_id]['subscriptions'].remove(channel)
+        
+        leave_room(channel)
+        emit('subscription_cancelled', {
+            'channel': channel,
+            'status': 'unsubscribed'
+        })
+
+@socketio.on('set_filters')
+def handle_set_filters(data):
+    """Set filters for log stream"""
+    client_id = request.sid
+    if client_id in connected_clients:
+        connected_clients[client_id]['filters'] = {
+            'log_levels': data.get('log_levels', []),
+            'services': data.get('services', []),
+            'min_response_time': data.get('min_response_time'),
+            'status_codes': data.get('status_codes', [])
+        }
+        emit('filters_updated', {'status': 'success'})
+
+@socketio.on('request_metrics')
+def handle_request_metrics():
+    """Send current metrics to requesting client"""
+    emit('metrics_update', realtime_metrics)
+
+def broadcast_log(log_entry):
+    """Broadcast a new log entry to all subscribed clients with filtering"""
+    for client_id, client_data in connected_clients.items():
+        # Apply client-specific filters
+        filters = client_data.get('filters', {})
+        
+        # Filter by log level
+        if filters.get('log_levels') and log_entry.get('level') not in filters['log_levels']:
+            continue
+        
+        # Filter by service
+        if filters.get('services') and log_entry.get('log_type') not in filters['services']:
+            continue
+        
+        # Filter by response time
+        min_response = filters.get('min_response_time')
+        if min_response and log_entry.get('response_time_ms', 0) < min_response:
+            continue
+        
+        # Filter by status code
+        if filters.get('status_codes') and log_entry.get('status_code') not in filters['status_codes']:
+            continue
+        
+        # Emit to this specific client
+        socketio.emit('new_log', log_entry, room=client_id)
+
+def broadcast_metrics():
+    """Broadcast current metrics to all connected clients"""
+    socketio.emit('metrics_update', realtime_metrics, broadcast=True)
+
+def poll_elasticsearch_for_new_logs():
+    """
+    Background thread that polls Elasticsearch for new logs
+    and broadcasts them to connected clients
+    """
+    last_timestamp = datetime.utcnow()
+    logs_count = 0
+    errors_count = 0
+    
+    while True:
+        try:
+            if not es_client or len(connected_clients) == 0:
+                time.sleep(1)
+                continue
+            
+            # Query for logs since last check
+            current_time = datetime.utcnow()
+            
+            query = {
+                "query": {
+                    "range": {
+                        "@timestamp": {
+                            "gte": last_timestamp.isoformat(),
+                            "lte": current_time.isoformat()
+                        }
+                    }
+                },
+                "sort": [{"@timestamp": "asc"}],
+                "size": 100
+            }
+            
+            try:
+                response = es_client.search(index="saas-logs-*", body=query)
+                hits = response['hits']['hits']
+                
+                if hits:
+                    for hit in hits:
+                        log_entry = hit['_source']
+                        log_entry['_id'] = hit['_id']
+                        
+                        # Broadcast to connected clients
+                        broadcast_log(log_entry)
+                        
+                        logs_count += 1
+                        if log_entry.get('level') in ['ERROR', 'CRITICAL']:
+                            errors_count += 1
+                    
+                    last_timestamp = current_time
+            except Exception as e:
+                print(f"Error querying Elasticsearch: {e}")
+            
+            # Update metrics every second
+            realtime_metrics['logs_per_second'] = logs_count
+            realtime_metrics['errors_per_minute'] = errors_count
+            realtime_metrics['total_logs_processed'] += logs_count
+            
+            # Broadcast metrics
+            if len(connected_clients) > 0:
+                broadcast_metrics()
+            
+            # Reset counters
+            logs_count = 0
+            # Keep errors_count for per-minute calculation (reset every 60 seconds separately)
+            
+            time.sleep(1)  # Poll every second
+            
+        except Exception as e:
+            print(f"Error in log polling thread: {e}")
+            time.sleep(5)
+
+def simulate_realtime_logs():
+    """
+    Simulate real-time log generation for testing
+    Can be disabled when using real log sources
+    """
+    log_levels = ['INFO', 'DEBUG', 'WARNING', 'ERROR', 'CRITICAL']
+    log_types = ['API', 'DATABASE', 'AUTH', 'SYSTEM']
+    endpoints = ['/api/users', '/api/products', '/api/orders', '/api/auth/login', '/api/auth/logout']
+    status_codes = [200, 201, 400, 401, 403, 404, 500, 503]
+    
+    while True:
+        try:
+            if len(connected_clients) == 0:
+                time.sleep(2)
+                continue
+            
+            # Generate a random log entry
+            log_entry = {
+                '@timestamp': datetime.utcnow().isoformat(),
+                'log_type': random.choice(log_types),
+                'level': random.choice(log_levels),
+                'client_ip': f"{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}",
+                'user_id': f"user_{random.randint(1000, 9999)}",
+                'method': random.choice(['GET', 'POST', 'PUT', 'DELETE']),
+                'endpoint': random.choice(endpoints),
+                'status_code': random.choice(status_codes),
+                'response_time_ms': round(random.uniform(10, 2000), 2),
+                'message': f"Log message at {datetime.utcnow().strftime('%H:%M:%S')}",
+                'server': f"server-{random.randint(1, 5)}",
+                'tenant_id': f"tenant_{random.randint(1, 10)}"
+            }
+            
+            # Update metrics
+            realtime_metrics['logs_per_second'] += 1
+            if log_entry['level'] in ['ERROR', 'CRITICAL']:
+                realtime_metrics['errors_per_minute'] += 1
+            realtime_metrics['total_logs_processed'] += 1
+            
+            # Broadcast the log
+            broadcast_log(log_entry)
+            
+            # Random delay between 100ms and 2s
+            time.sleep(random.uniform(0.1, 2))
+            
+        except Exception as e:
+            print(f"Error in log simulation: {e}")
+            time.sleep(2)
+
+# Redis Pub/Sub listener for real-time logs
+def listen_to_redis_pubsub():
+    """Listen to Redis Pub/Sub for real-time log messages"""
+    if not redis_client:
+        return
+    
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe('logs')
+    
+    print("Listening to Redis Pub/Sub on 'logs' channel...")
+    
+    for message in pubsub.listen():
+        try:
+            if message['type'] == 'message':
+                log_data = json.loads(message['data'])
+                
+                # Update metrics
+                realtime_metrics['logs_per_second'] += 1
+                if log_data.get('level') in ['ERROR', 'CRITICAL']:
+                    realtime_metrics['errors_per_minute'] += 1
+                realtime_metrics['total_logs_processed'] += 1
+                
+                # Broadcast to clients
+                broadcast_log(log_data)
+        except Exception as e:
+            print(f"Error processing Redis message: {e}")
+
+# Start background threads for real-time processing
+def start_background_threads():
+    """Start background threads for real-time log processing"""
+    # Option 1: Poll Elasticsearch (uncomment if using Elasticsearch polling)
+    # polling_thread = threading.Thread(target=poll_elasticsearch_for_new_logs, daemon=True)
+    # polling_thread.start()
+    
+    # Option 2: Listen to Redis Pub/Sub (uncomment if using Redis)
+    # redis_thread = threading.Thread(target=listen_to_redis_pubsub, daemon=True)
+    # redis_thread.start()
+    
+    # Option 3: Simulate logs for testing (comment out in production)
+    simulation_thread = threading.Thread(target=simulate_realtime_logs, daemon=True)
+    simulation_thread.start()
+    
+    print("Real-time processing threads started")
+
+# ============================================================================
+# Additional API Routes for Real-Time Features
+# ============================================================================
+
+@app.route('/live-dashboard')
+@login_required
+def live_dashboard():
+    """Render live dashboard page"""
+    return render_template('live_dashboard.html')
+
+@app.route('/live-logs')
+@login_required
+def live_logs():
+    """Render live log tail page"""
+    return render_template('live_logs.html')
+
+@app.route('/api/realtime/metrics')
+def get_realtime_metrics():
+    """Get current real-time metrics"""
+    return jsonify(realtime_metrics)
+
+@app.route('/api/realtime/publish', methods=['POST'])
+def publish_log():
+    """
+    Publish a log entry to real-time stream
+    Used for webhook integrations
+    """
+    try:
+        log_data = request.get_json()
+        
+        if not log_data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Add timestamp if not present
+        if '@timestamp' not in log_data:
+            log_data['@timestamp'] = datetime.utcnow().isoformat()
+        
+        # Broadcast to connected clients
+        broadcast_log(log_data)
+        
+        # Optionally publish to Redis for other consumers
+        if redis_client:
+            redis_client.publish('logs', json.dumps(log_data))
+        
+        return jsonify({'success': True, 'message': 'Log published'}), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Start background threads
+    start_background_threads()
+    
+    # Run with SocketIO
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False)

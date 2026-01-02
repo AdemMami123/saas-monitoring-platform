@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Dashboard - Real-Time Monitoring</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <!-- Chart.js and Streaming Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@2.0.0/dist/chartjs-plugin-streaming.min.js"></script>
+    
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,.08);
+        }
+        
+        .navbar-flash {
+            animation: flash-red 0.5s ease-in-out 3;
+        }
+        
+        @keyframes flash-red {
+            0%, 100% { background-color: #0d6efd; }
+            50% { background-color: #dc3545; }
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,.08);
+            transition: transform 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,.12);
+        }
+        
+        .metric-card {
+            text-align: center;
+            padding: 1.5rem;
+        }
+        
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 0.5rem 0;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .metric-label {
+            color: #6c757d;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .metric-trend {
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+        
+        .connection-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        .connected {
+            background-color: #28a745;
+        }
+        
+        .disconnected {
+            background-color: #dc3545;
+            animation: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 1rem 0;
+        }
+        
+        .alert-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            min-width: 24px;
+            height: 24px;
+            border-radius: 12px;
+            background-color: #dc3545;
+            color: white;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: bold;
+            animation: bounce 0.5s ease-in-out infinite alternate;
+        }
+        
+        @keyframes bounce {
+            from { transform: scale(1); }
+            to { transform: scale(1.1); }
+        }
+        
+        .log-level-ERROR { color: #dc3545; font-weight: bold; }
+        .log-level-CRITICAL { color: #721c24; font-weight: bold; background-color: #f8d7da; }
+        .log-level-WARNING { color: #856404; }
+        .log-level-INFO { color: #004085; }
+        .log-level-DEBUG { color: #6c757d; }
+        
+        .recent-log-item {
+            padding: 0.5rem;
+            border-bottom: 1px solid #dee2e6;
+            font-size: 0.875rem;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .recent-log-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-dot.success { background-color: #28a745; }
+        .status-dot.warning { background-color: #ffc107; }
+        .status-dot.error { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary" id="mainNavbar">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-speedometer2"></i> SaaS Monitor
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="text-white me-3">
+                    <span class="connection-indicator connected" id="connectionIndicator"></span>
+                    <span id="connectionStatus">Connected</span>
+                </span>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="bi bi-house"></i> Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/live-dashboard"><i class="bi bi-broadcast"></i> Live</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/live-logs"><i class="bi bi-terminal"></i> Live Logs</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/search"><i class="bi bi-search"></i> Search</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/upload"><i class="bi bi-upload"></i> Upload</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Alert Badge -->
+    <div class="alert-badge" id="alertBadge">0</div>
+
+    <!-- Main Content -->
+    <div class="container-fluid mt-4">
+        <div class="row mb-4">
+            <div class="col">
+                <h2><i class="bi bi-broadcast"></i> Real-Time Monitoring Dashboard</h2>
+                <p class="text-muted">Live metrics and streaming analytics</p>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-outline-primary" id="requestNotificationPermission">
+                    <i class="bi bi-bell"></i> Enable Notifications
+                </button>
+                <button class="btn btn-outline-secondary" id="toggleSound">
+                    <i class="bi bi-volume-up" id="soundIcon"></i> <span id="soundText">Sound On</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Real-Time Metrics -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="metric-label">Logs Per Second</div>
+                    <div class="metric-value text-primary" id="logsPerSecond">0</div>
+                    <div class="metric-trend text-success" id="logsTrend">
+                        <i class="bi bi-arrow-up"></i> Live
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="metric-label">Errors Per Minute</div>
+                    <div class="metric-value text-danger" id="errorsPerMinute">0</div>
+                    <div class="metric-trend" id="errorsTrend">
+                        <i class="bi bi-dash-circle"></i> Normal
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="metric-label">Connected Users</div>
+                    <div class="metric-value text-success" id="connectedUsers">0</div>
+                    <div class="metric-trend text-muted">
+                        <i class="bi bi-people"></i> Active
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="metric-label">Total Processed</div>
+                    <div class="metric-value text-info" id="totalProcessed">0</div>
+                    <div class="metric-trend text-muted">
+                        <i class="bi bi-graph-up"></i> All Time
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-Time Charts -->
+        <div class="row mb-4">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-graph-up"></i> Log Stream Rate</h5>
+                        <div class="chart-container">
+                            <canvas id="logRateChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-pie-chart"></i> Log Levels</h5>
+                        <div class="chart-container">
+                            <canvas id="logLevelChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-clock-history"></i> Response Time Distribution</h5>
+                        <div class="chart-container">
+                            <canvas id="responseTimeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-bar-chart"></i> Status Codes</h5>
+                        <div class="chart-container">
+                            <canvas id="statusCodeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-activity"></i> Recent Activity</h5>
+                        <div id="recentLogs" style="max-height: 300px; overflow-y: auto;">
+                            <p class="text-muted text-center p-3">Waiting for logs...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Global variables
+        let socket;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 10;
+        let soundEnabled = true;
+        let alertCount = 0;
+        
+        // Audio for alerts
+        const alertSound = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZSA0PV6vl8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSA0PWqvl8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSA0PWqvl8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSAwPW6rm8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSAwPW6rm8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSAwPW6rm8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSAwPW6rm8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSAwPW6rm8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSAwPW6rm8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSAwPW6rm8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSAwPW6rm8LJlHAU6ktf0yXgsBS+A0PPaiToGHmS76+OZSAwPW6rm8LJlHAU6ktf0yXgs');
+        
+        // Chart instances
+        let logRateChart, logLevelChart, responseTimeChart, statusCodeChart;
+        
+        // Data tracking
+        const logLevelCounts = { INFO: 0, DEBUG: 0, WARNING: 0, ERROR: 0, CRITICAL: 0 };
+        const statusCodeCounts = {};
+        const recentLogs = [];
+        const MAX_RECENT_LOGS = 20;
+        
+        // Initialize Socket.IO connection
+        function initializeSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${window.location.protocol}//${window.location.host}`;
+            
+            socket = io(wsUrl, {
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: maxReconnectAttempts
+            });
+            
+            // Connection events
+            socket.on('connect', () => {
+                console.log('Connected to server');
+                updateConnectionStatus(true);
+                reconnectAttempts = 0;
+                
+                // Subscribe to all logs
+                socket.emit('subscribe', { channel: 'all' });
+            });
+            
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+                updateConnectionStatus(false);
+            });
+            
+            socket.on('connect_error', (error) => {
+                console.error('Connection error:', error);
+                reconnectAttempts++;
+                updateConnectionStatus(false);
+            });
+            
+            socket.on('connection_status', (data) => {
+                console.log('Connection status:', data);
+            });
+            
+            // Real-time events
+            socket.on('new_log', handleNewLog);
+            socket.on('metrics_update', handleMetricsUpdate);
+            socket.on('subscription_confirmed', (data) => {
+                console.log('Subscription confirmed:', data);
+            });
+        }
+        
+        // Update connection status indicator
+        function updateConnectionStatus(connected) {
+            const indicator = document.getElementById('connectionIndicator');
+            const status = document.getElementById('connectionStatus');
+            
+            if (connected) {
+                indicator.classList.remove('disconnected');
+                indicator.classList.add('connected');
+                status.textContent = 'Connected';
+            } else {
+                indicator.classList.remove('connected');
+                indicator.classList.add('disconnected');
+                status.textContent = 'Disconnected';
+            }
+        }
+        
+        // Handle new log entries
+        function handleNewLog(log) {
+            // Update log level counts
+            const level = log.level || 'INFO';
+            if (logLevelCounts.hasOwnProperty(level)) {
+                logLevelCounts[level]++;
+            }
+            
+            // Update status code counts
+            if (log.status_code) {
+                statusCodeCounts[log.status_code] = (statusCodeCounts[log.status_code] || 0) + 1;
+            }
+            
+            // Add to recent logs
+            recentLogs.unshift(log);
+            if (recentLogs.length > MAX_RECENT_LOGS) {
+                recentLogs.pop();
+            }
+            updateRecentLogs();
+            
+            // Update charts
+            updateCharts(log);
+            
+            // Handle alerts
+            if (level === 'ERROR' || level === 'CRITICAL') {
+                handleAlert(log);
+            }
+        }
+        
+        // Handle metrics updates
+        function handleMetricsUpdate(metrics) {
+            document.getElementById('logsPerSecond').textContent = metrics.logs_per_second || 0;
+            document.getElementById('errorsPerMinute').textContent = metrics.errors_per_minute || 0;
+            document.getElementById('connectedUsers').textContent = metrics.connected_users || 0;
+            document.getElementById('totalProcessed').textContent = (metrics.total_logs_processed || 0).toLocaleString();
+            
+            // Update trend indicators
+            if (metrics.errors_per_minute > 10) {
+                document.getElementById('errorsTrend').innerHTML = '<i class="bi bi-exclamation-triangle text-danger"></i> High';
+                document.getElementById('errorsTrend').className = 'metric-trend text-danger';
+            } else {
+                document.getElementById('errorsTrend').innerHTML = '<i class="bi bi-dash-circle"></i> Normal';
+                document.getElementById('errorsTrend').className = 'metric-trend text-muted';
+            }
+        }
+        
+        // Handle alert notifications
+        function handleAlert(log) {
+            alertCount++;
+            const badge = document.getElementById('alertBadge');
+            badge.textContent = alertCount;
+            badge.style.display = 'flex';
+            
+            // Flash navbar
+            const navbar = document.getElementById('mainNavbar');
+            navbar.classList.add('navbar-flash');
+            setTimeout(() => navbar.classList.remove('navbar-flash'), 1500);
+            
+            // Update page title
+            document.title = `(${alertCount}) ${log.level} Alert - Live Dashboard`;
+            
+            // Play sound
+            if (soundEnabled) {
+                alertSound.play().catch(e => console.log('Audio play failed:', e));
+            }
+            
+            // Desktop notification
+            if (Notification.permission === 'granted') {
+                new Notification(`${log.level} Alert`, {
+                    body: log.message || 'New error detected',
+                    icon: '/static/alert-icon.png',
+                    badge: '/static/badge-icon.png',
+                    tag: log.level
+                });
+            }
+        }
+        
+        // Update recent logs display
+        function updateRecentLogs() {
+            const container = document.getElementById('recentLogs');
+            container.innerHTML = recentLogs.map(log => {
+                const level = log.level || 'INFO';
+                const statusClass = log.status_code >= 500 ? 'error' : 
+                                   log.status_code >= 400 ? 'warning' : 'success';
+                const time = new Date(log['@timestamp']).toLocaleTimeString();
+                
+                return `
+                    <div class="recent-log-item log-level-${level}">
+                        <span class="status-dot ${statusClass}"></span>
+                        <strong>[${time}]</strong>
+                        <span class="badge bg-secondary">${level}</span>
+                        ${log.log_type || 'LOG'} - 
+                        ${log.endpoint || log.message || 'No message'}
+                        ${log.status_code ? `<span class="badge bg-${statusClass === 'error' ? 'danger' : statusClass === 'warning' ? 'warning' : 'success'}">${log.status_code}</span>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Initialize charts
+        function initializeCharts() {
+            // Log Rate Chart (Streaming)
+            const logRateCtx = document.getElementById('logRateChart').getContext('2d');
+            logRateChart = new Chart(logRateCtx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Logs/sec',
+                        data: [],
+                        borderColor: 'rgb(13, 110, 253)',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'realtime',
+                            realtime: {
+                                duration: 60000,
+                                refresh: 1000,
+                                delay: 1000,
+                                onRefresh: chart => {
+                                    chart.data.datasets[0].data.push({
+                                        x: Date.now(),
+                                        y: parseInt(document.getElementById('logsPerSecond').textContent) || 0
+                                    });
+                                }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+            
+            // Log Level Chart (Doughnut)
+            const logLevelCtx = document.getElementById('logLevelChart').getContext('2d');
+            logLevelChart = new Chart(logLevelCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(logLevelCounts),
+                    datasets: [{
+                        data: Object.values(logLevelCounts),
+                        backgroundColor: [
+                            'rgba(13, 110, 253, 0.8)',   // INFO - blue
+                            'rgba(108, 117, 125, 0.8)',  // DEBUG - gray
+                            'rgba(255, 193, 7, 0.8)',    // WARNING - yellow
+                            'rgba(220, 53, 69, 0.8)',    // ERROR - red
+                            'rgba(114, 28, 36, 0.8)'     // CRITICAL - dark red
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+            
+            // Response Time Chart (Bar)
+            const responseTimeCtx = document.getElementById('responseTimeChart').getContext('2d');
+            responseTimeChart = new Chart(responseTimeCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['0-100ms', '100-500ms', '500-1000ms', '1000-2000ms', '2000ms+'],
+                    datasets: [{
+                        label: 'Response Times',
+                        data: [0, 0, 0, 0, 0],
+                        backgroundColor: [
+                            'rgba(40, 167, 69, 0.8)',
+                            'rgba(13, 110, 253, 0.8)',
+                            'rgba(255, 193, 7, 0.8)',
+                            'rgba(253, 126, 20, 0.8)',
+                            'rgba(220, 53, 69, 0.8)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+            
+            // Status Code Chart (Horizontal Bar)
+            const statusCodeCtx = document.getElementById('statusCodeChart').getContext('2d');
+            statusCodeChart = new Chart(statusCodeCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Count',
+                        data: [],
+                        backgroundColor: 'rgba(13, 110, 253, 0.8)'
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update charts with new data
+        function updateCharts(log) {
+            // Update log level chart
+            logLevelChart.data.datasets[0].data = Object.values(logLevelCounts);
+            logLevelChart.update('none');
+            
+            // Update response time distribution
+            if (log.response_time_ms) {
+                const rt = log.response_time_ms;
+                const idx = rt < 100 ? 0 : rt < 500 ? 1 : rt < 1000 ? 2 : rt < 2000 ? 3 : 4;
+                responseTimeChart.data.datasets[0].data[idx]++;
+                responseTimeChart.update('none');
+            }
+            
+            // Update status code chart
+            const topCodes = Object.entries(statusCodeCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            statusCodeChart.data.labels = topCodes.map(([code]) => code);
+            statusCodeChart.data.datasets[0].data = topCodes.map(([, count]) => count);
+            statusCodeChart.update('none');
+        }
+        
+        // Request notification permission
+        document.getElementById('requestNotificationPermission').addEventListener('click', () => {
+            if ('Notification' in window) {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        alert('Notifications enabled!');
+                    }
+                });
+            } else {
+                alert('Notifications not supported by your browser');
+            }
+        });
+        
+        // Toggle sound
+        document.getElementById('toggleSound').addEventListener('click', () => {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('soundIcon');
+            const text = document.getElementById('soundText');
+            
+            if (soundEnabled) {
+                icon.className = 'bi bi-volume-up';
+                text.textContent = 'Sound On';
+            } else {
+                icon.className = 'bi bi-volume-mute';
+                text.textContent = 'Sound Off';
+            }
+        });
+        
+        // Reset alert badge on focus
+        window.addEventListener('focus', () => {
+            alertCount = 0;
+            document.getElementById('alertBadge').style.display = 'none';
+            document.title = 'Live Dashboard - Real-Time Monitoring';
+        });
+        
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeSocket();
+            initializeCharts();
+            
+            // Request notification permission after 2 seconds
+            setTimeout(() => {
+                if (Notification.permission === 'default') {
+                    document.getElementById('requestNotificationPermission').click();
+                }
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

@@ -37,10 +37,17 @@ services:
     environment:
       - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5045:5000"    # TCP streaming input (external:internal)
+      - "5001:5001/udp"  # UDP streaming input
+      - "8080:8080"    # HTTP webhook input
+      - "5044:5044"    # Beats input (Filebeat)
     networks:
       - elk
     depends_on:
       elasticsearch:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9600/_node/stats || exit 1"]
@@ -121,8 +128,9 @@ services:
       - REDIS_PORT=6379
     volumes:
       - ./app:/app
+      - ./uploads:/app/uploads
     ports:
-      - "5000:5000"
+      - "5000:5000"   # Flask app with WebSocket support
     networks:
       - elk
     depends_on:
