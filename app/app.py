@@ -1462,33 +1462,41 @@ def handle_request_metrics():
 
 def broadcast_log(log_entry):
     """Broadcast a new log entry to all subscribed clients with filtering"""
+    # Broadcast to all clients in the 'all' room
+    socketio.emit('new_log', log_entry, room='all')
+    
+    # Also apply filters for individual client subscriptions
     for client_id, client_data in connected_clients.items():
-        # Apply client-specific filters
+        # Apply client-specific filters if they exist
         filters = client_data.get('filters', {})
-        
+
+        # If no filters are set, skip individual emission (already broadcast above)
+        if not filters:
+            continue
+
         # Filter by log level
         if filters.get('log_levels') and log_entry.get('level') not in filters['log_levels']:
             continue
-        
+
         # Filter by service
         if filters.get('services') and log_entry.get('log_type') not in filters['services']:
             continue
-        
+
         # Filter by response time
         min_response = filters.get('min_response_time')
         if min_response and log_entry.get('response_time_ms', 0) < min_response:
             continue
-        
+
         # Filter by status code
         if filters.get('status_codes') and log_entry.get('status_code') not in filters['status_codes']:
             continue
-        
-        # Emit to this specific client
-        socketio.emit('new_log', log_entry, room=client_id)
+
+        # Emit filtered version to this specific client (optional - for advanced filtering)
+        # socketio.emit('new_log', log_entry, room=client_id)
 
 def broadcast_metrics():
     """Broadcast current metrics to all connected clients"""
-    socketio.emit('metrics_update', realtime_metrics, broadcast=True)
+    socketio.emit('metrics_update', realtime_metrics, room='all')
 
 def poll_elasticsearch_for_new_logs():
     """
